@@ -4,28 +4,59 @@ on:
   workflow_dispatch:
     inputs:
       duration_hours:
-        description: "Duration to keep the session alive (in hours, max 6)"
-        required: false
+        description: "Duration to keep runner alive in hours (1 to 6)"
+        required: true
         default: "2"
 
 jobs:
-  ssh-session:
-    name: ARM64 SSH Session (ubuntu-24.04-arm)
+  arm64-ssh:
+    name: Interactive ARM64 (ubuntu-24.04-arm)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 120 # Keeps alive for up to 2 hours
+    timeout-minutes: 360 # GitHub max timeout (6 hours)
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Print System Info
+      - name: System Diagnostics
         run: |
-          echo "=== Runner Environment ==="
+          echo "=== Hardware Specs ==="
           uname -a
           lscpu
           free -h
           df -h
 
-      - name: Start Interactive SSH Session (tmate)
+      - name: Start tmate Session
+        id: tmate
         uses: mxschmitt/action-tmate@v3
         with:
-          detached: false # Blocks until timeout (2 hours) or manual termination
+          detached: true
+
+      - name: Publish Connection Details
+        run: |
+          echo "## 🚀 ARM64 SSH Session is LIVE!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 💻 Connection Methods" >> $GITHUB_STEP_SUMMARY
+          echo "- **Direct SSH**: \`${{ steps.tmate.outputs.ssh-command }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Web Browser Shell**: [Click here to open Web Terminal](${{ steps.tmate.outputs.web-url }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ⏱️ Session Info" >> $GITHUB_STEP_SUMMARY
+          echo "- **Runner**: \`ubuntu-24.04-arm\` (4 vCPUs Neoverse-N2, 16 GB RAM)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Duration**: ${{ inputs.duration_hours }} hour(s)" >> $GITHUB_STEP_SUMMARY
+          echo "- **To terminate early**: Run \`touch /tmp/finish\` inside the runner shell" >> $GITHUB_STEP_SUMMARY
+
+      - name: Keep Runner Alive
+        run: |
+          HOURS=${{ inputs.duration_hours }}
+          TOTAL_SECS=$(( HOURS * 3600 ))
+          echo "Keeping runner alive for $TOTAL_SECS seconds ($HOURS hours)..."
+          echo "You can exit anytime by typing: touch /tmp/finish"
+          
+          ELAPSED=0
+          while [ $ELAPSED -lt $TOTAL_SECS ]; do
+            if [ -f /tmp/finish ]; then
+              echo "Early termination requested via /tmp/finish. Exiting."
+              break
+            fi
+            sleep 10
+            ELAPSED=$(( ELAPSED + 10 ))
+          done
