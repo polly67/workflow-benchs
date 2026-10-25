@@ -29,7 +29,7 @@ def generate_comparison_table():
         return ""
 
     # Sort runs in a clean, logical order
-    preferred_order = ["ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "macos-15-intel"]
+    preferred_order = ["ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "macos-15-intel", "self-hosted"]
     runs.sort(key=lambda r: preferred_order.index(r.get("runner_label")) if r.get("runner_label") in preferred_order else 99)
 
     runners = [r.get("runner_label", "unknown") for r in runs]

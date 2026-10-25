@@ -1,4 +1,4 @@
-name: Runner Benchmarks (Linux x86/ARM vs macOS Apple Silicon/Intel)
+name: Runner Benchmarks (x86 vs ARM vs macOS vs Self-Hosted)
 
 on:
   push:
@@ -20,6 +20,7 @@ jobs:
           - ubuntu-24.04-arm   # 4 vCPU, 16 GB RAM (ARM64 Neoverse-N2)
           - macos-latest       # 3 vCPU, 7 GB RAM (Apple Silicon M-Series)
           - macos-15-intel     # 4 vCPU, 14 GB RAM (macOS 15 Intel x86_64)
+          - self-hosted        # Custom Self-Hosted Server
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -32,8 +33,8 @@ jobs:
       - name: Install Benchmark Dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y fio sysbench
+          sudo apt-get update || true
+          sudo apt-get install -y fio sysbench || true
 
       - name: Install Benchmark Dependencies (macOS)
         if: runner.os == 'macOS'
@@ -87,7 +88,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add results/ README.md
           if ! git diff --staged --quiet; then
-            git commit -m "docs: update benchmark results including macos-latest [skip ci]"
+            git commit -m "docs: update benchmark results with self-hosted [skip ci]"
             git push
           else
             echo "No changes to commit"
