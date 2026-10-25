@@ -1,44 +1,44 @@
 {
   "runner_label": "ubuntu-latest",
-  "timestamp": "2026-10-25T15:44:04Z",
+  "timestamp": "2026-10-25T15:47:40Z",
   "sys_info": {
     "os_name": "Ubuntu 24.04.5 LTS",
     "kernel": "6.17.0-1022-azure",
     "arch": "x86_64",
-    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "cpu_model": "INTEL(R) XEON(R) PLATINUM 8573C",
     "cpu_cores": 4,
     "mem_total_gb": 15.61,
-    "mem_avail_gb": 14.57,
+    "mem_avail_gb": 14.24,
     "disk_total_gb": 144.26,
-    "disk_free_gb": 85.37
+    "disk_free_gb": 85.36
   },
   "sha256": {
-    "sha256_mb_per_sec": 1508.63,
-    "time_sec": 0.033
+    "sha256_mb_per_sec": 1658.0,
+    "time_sec": 0.03
   },
   "cpu": {
-    "single_thread_eps": 1442.78,
-    "single_thread_lat_avg_ms": 0.69,
-    "multi_thread_eps": 3154.2,
-    "multi_thread_lat_avg_ms": 1.27
+    "single_thread_eps": 1183.43,
+    "single_thread_lat_avg_ms": 0.84,
+    "multi_thread_eps": 2447.82,
+    "multi_thread_lat_avg_ms": 1.63
   },
   "memory": {
-    "mem_read_mib_sec": 100682.98,
-    "mem_write_mib_sec": 44572.27
+    "mem_read_mib_sec": 106386.88,
+    "mem_write_mib_sec": 48360.43
   },
   "disk": {
-    "randread_4k_iops": 19527.3,
-    "randread_4k_bw_mb_s": 76.28,
-    "randread_4k_lat_ms": 3.271,
-    "randwrite_4k_iops": 19614.9,
-    "randwrite_4k_bw_mb_s": 76.62,
-    "randwrite_4k_lat_ms": 3.257,
-    "seqread_1m_bw_mb_s": 406.69,
-    "seqread_1m_iops": 406.7,
-    "seqwrite_1m_bw_mb_s": 405.48,
-    "seqwrite_1m_iops": 405.5,
-    "mixed_4k_read_iops": 9807.6,
-    "mixed_4k_write_iops": 9788.9,
-    "mixed_4k_total_iops": 19596.5
+    "randread_4k_iops": 19913.6,
+    "randread_4k_bw_mb_s": 77.79,
+    "randread_4k_lat_ms": 3.211,
+    "randwrite_4k_iops": 19936.6,
+    "randwrite_4k_bw_mb_s": 77.88,
+    "randwrite_4k_lat_ms": 3.207,
+    "seqread_1m_bw_mb_s": 396.97,
+    "seqread_1m_iops": 397.0,
+    "seqwrite_1m_bw_mb_s": 261.49,
+    "seqwrite_1m_iops": 261.5,
+    "mixed_4k_read_iops": 9995.9,
+    "mixed_4k_write_iops": 9984.7,
+    "mixed_4k_total_iops": 19980.6
   }
 }
