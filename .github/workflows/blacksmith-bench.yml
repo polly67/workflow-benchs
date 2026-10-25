@@ -1,0 +1,46 @@
+name: Blacksmith Runner Benchmark
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  blacksmith-benchmark:
+    name: Benchmark Blacksmith (4 vCPU Ubuntu 24.04)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fio sysbench
+
+      - name: Run Benchmark
+        run: |
+          chmod +x scripts/benchmark.py
+          python3 scripts/benchmark.py "blacksmith-4vcpu-ubuntu-2404"
+
+      - name: Aggregate & Update Table
+        run: |
+          chmod +x scripts/compare.py
+          python3 scripts/compare.py
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/ README.md
+          if ! git diff --staged --quiet; then
+            git commit -m "docs: add blacksmith benchmark results [skip ci]"
+            git push
+          else
+            echo "No changes"
+          fi
