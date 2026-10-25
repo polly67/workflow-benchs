@@ -1,0 +1,19 @@
+{
+  "system": "Linux",
+  "os_version": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39",
+  "arch": "x86_64",
+  "kernel": "6.8.0-146-generic",
+  "cpu_model": "AMD EPYC Processor",
+  "cpu_virt_extensions": true,
+  "virt_tech": "AMD-V (svm)",
+  "dev_kvm_exists": true,
+  "dev_kvm_readable": true,
+  "dev_kvm_writable": true,
+  "kvm_api_functional": true,
+  "kvm_api_version": 12,
+  "macos_hv_support": null,
+  "summary_status": "FULL_KVM_ACCESS",
+  "details": "KVM acceleration fully operational (API v12)",
+  "runner_label": "self-hosted",
+  "timestamp": "2026-10-25T17:53:22Z"
+}

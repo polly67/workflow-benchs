@@ -1,0 +1,84 @@
+name: Check KVM & Virtualization Support
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  check-kvm:
+    name: Check KVM on ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+          - macos-latest
+          - macos-15-intel
+          - self-hosted
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Inspect KVM & Virtualization
+        run: |
+          chmod +x scripts/check_kvm.py
+          python3 scripts/check_kvm.py "${{ matrix.runner }}"
+
+      - name: Upload KVM Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: kvm-${{ matrix.runner }}
+          path: results/kvm-${{ matrix.runner }}.json
+          retention-days: 7
+
+  aggregate-kvm:
+    name: Aggregate & Compare KVM
+    needs: [check-kvm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kvm-*
+          path: downloaded-kvm
+
+      - name: Consolidate & Generate Table
+        run: |
+          mkdir -p results
+          find downloaded-kvm -type f -name "kvm-*.json" -exec cp {} results/ \;
+          ls -la results/
+          chmod +x scripts/compare_kvm.py
+          python3 scripts/compare_kvm.py
+
+      - name: Commit & Push KVM Table
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/ README.md
+          if ! git diff --staged --quiet; then
+            git commit -m "docs: update KVM virtualization support matrix [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
