@@ -1,0 +1,44 @@
+{
+  "runner_label": "macos-15-intel",
+  "timestamp": "2026-10-25T15:52:21Z",
+  "sys_info": {
+    "os_name": "macOS 15.7.9",
+    "kernel": "24.6.0",
+    "arch": "x86_64",
+    "cpu_model": "Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz",
+    "cpu_cores": 4,
+    "mem_total_gb": 14.0,
+    "mem_avail_gb": 14.0,
+    "disk_total_gb": 324.68,
+    "disk_free_gb": 108.4
+  },
+  "sha256": {
+    "sha256_mb_per_sec": 394.45,
+    "time_sec": 0.127
+  },
+  "cpu": {
+    "single_thread_eps": 3533870.11,
+    "single_thread_lat_avg_ms": 0.0,
+    "multi_thread_eps": 10654345.91,
+    "multi_thread_lat_avg_ms": 0.0
+  },
+  "memory": {
+    "mem_read_mib_sec": 63150.23,
+    "mem_write_mib_sec": 37940.54
+  },
+  "disk": {
+    "randread_4k_iops": 7739.4,
+    "randread_4k_bw_mb_s": 30.23,
+    "randread_4k_lat_ms": 1.909,
+    "randwrite_4k_iops": 6986.1,
+    "randwrite_4k_bw_mb_s": 27.29,
+    "randwrite_4k_lat_ms": 2.051,
+    "seqread_1m_bw_mb_s": 3427.77,
+    "seqread_1m_iops": 3427.8,
+    "seqwrite_1m_bw_mb_s": 2257.27,
+    "seqwrite_1m_iops": 2257.3,
+    "mixed_4k_read_iops": 4144.5,
+    "mixed_4k_write_iops": 4130.1,
+    "mixed_4k_total_iops": 8274.5
+  }
+}
