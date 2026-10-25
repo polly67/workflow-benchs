@@ -28,8 +28,9 @@ def generate_comparison_table():
     if not runs:
         return ""
 
-    # Sort runs so ubuntu-latest comes first, then ubuntu-24.04-arm, etc.
-    runs.sort(key=lambda r: r.get("runner_label", ""))
+    # Sort runs in a clean, logical order
+    preferred_order = ["ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "macos-15-intel"]
+    runs.sort(key=lambda r: preferred_order.index(r.get("runner_label")) if r.get("runner_label") in preferred_order else 99)
 
     runners = [r.get("runner_label", "unknown") for r in runs]
 

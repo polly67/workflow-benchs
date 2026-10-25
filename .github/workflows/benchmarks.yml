@@ -1,4 +1,4 @@
-name: Runner Benchmarks (x86-64 vs ARM64 vs macOS Apple Silicon)
+name: Runner Benchmarks (Linux x86/ARM vs macOS Apple Silicon/Intel)
 
 on:
   push:
@@ -19,6 +19,7 @@ jobs:
           - ubuntu-latest      # 4 vCPU, 16 GB RAM (x86_64 AMD EPYC)
           - ubuntu-24.04-arm   # 4 vCPU, 16 GB RAM (ARM64 Neoverse-N2)
           - macos-latest       # 3 vCPU, 7 GB RAM (Apple Silicon M-Series)
+          - macos-15-intel     # 4 vCPU, 14 GB RAM (macOS 15 Intel x86_64)
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
