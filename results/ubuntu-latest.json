@@ -1,6 +1,6 @@
 {
   "runner_label": "ubuntu-latest",
-  "timestamp": "2026-10-25T15:36:33Z",
+  "timestamp": "2026-10-25T15:44:04Z",
   "sys_info": {
     "os_name": "Ubuntu 24.04.5 LTS",
     "kernel": "6.17.0-1022-azure",
@@ -8,37 +8,37 @@
     "cpu_model": "AMD EPYC 7763 64-Core Processor",
     "cpu_cores": 4,
     "mem_total_gb": 15.61,
-    "mem_avail_gb": 14.42,
+    "mem_avail_gb": 14.57,
     "disk_total_gb": 144.26,
     "disk_free_gb": 85.37
   },
   "sha256": {
-    "sha256_mb_per_sec": 1506.23,
+    "sha256_mb_per_sec": 1508.63,
     "time_sec": 0.033
   },
   "cpu": {
-    "single_thread_eps": 1440.82,
+    "single_thread_eps": 1442.78,
     "single_thread_lat_avg_ms": 0.69,
-    "multi_thread_eps": 3154.33,
+    "multi_thread_eps": 3154.2,
     "multi_thread_lat_avg_ms": 1.27
   },
   "memory": {
-    "mem_read_mib_sec": 99129.32,
-    "mem_write_mib_sec": 47919.66
+    "mem_read_mib_sec": 100682.98,
+    "mem_write_mib_sec": 44572.27
   },
   "disk": {
-    "randread_4k_iops": 19548.5,
-    "randread_4k_bw_mb_s": 76.36,
-    "randread_4k_lat_ms": 3.268,
-    "randwrite_4k_iops": 19571.1,
-    "randwrite_4k_bw_mb_s": 76.45,
-    "randwrite_4k_lat_ms": 3.263,
-    "seqread_1m_bw_mb_s": 405.16,
-    "seqread_1m_iops": 405.2,
-    "seqwrite_1m_bw_mb_s": 406.04,
-    "seqwrite_1m_iops": 406.0,
-    "mixed_4k_read_iops": 9832.5,
-    "mixed_4k_write_iops": 9817.3,
-    "mixed_4k_total_iops": 19649.8
+    "randread_4k_iops": 19527.3,
+    "randread_4k_bw_mb_s": 76.28,
+    "randread_4k_lat_ms": 3.271,
+    "randwrite_4k_iops": 19614.9,
+    "randwrite_4k_bw_mb_s": 76.62,
+    "randwrite_4k_lat_ms": 3.257,
+    "seqread_1m_bw_mb_s": 406.69,
+    "seqread_1m_iops": 406.7,
+    "seqwrite_1m_bw_mb_s": 405.48,
+    "seqwrite_1m_iops": 405.5,
+    "mixed_4k_read_iops": 9807.6,
+    "mixed_4k_write_iops": 9788.9,
+    "mixed_4k_total_iops": 19596.5
   }
 }

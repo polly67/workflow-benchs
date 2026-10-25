@@ -57,26 +57,26 @@ Comparison of GitHub Actions standard hosted runners for public repositories (x8
 | vCPUs | 3 | 4 | 4 |
 | RAM Total (GB) | 7.0 | 15.57 | 15.61 |
 | Disk Total (GB) | 319.51 | 144.26 | 144.26 |
-| Disk Free (GB) | 96.07 | 107.32 | 85.37 |
+| Disk Free (GB) | 96.19 | 107.32 | 85.37 |
 | **🧠 CPU Performance** |  |  |  |
-| Sysbench Single-Thread (events/s) | **9256888.07** | **1498.26** | **1440.82** |
+| Sysbench Single-Thread (events/s) | **7091172.95** | **1497.28** | **1442.78** |
 | Sysbench Single-Thread Avg Latency (ms) | 0.0 | 0.67 | 0.69 |
-| Sysbench Multi-Thread (events/s) | **27840292.68** | **5973.69** | **3154.33** |
+| Sysbench Multi-Thread (events/s) | **22261411.49** | **5964.72** | **3154.2** |
 | Sysbench Multi-Thread Avg Latency (ms) | 0.0 | 0.67 | 1.27 |
-| SHA256 Throughput (MB/s) | **2246.04** | **2044.11** | **1506.23** |
+| SHA256 Throughput (MB/s) | **2068.07** | **2039.26** | **1508.63** |
 | **💾 Memory Bandwidth** |  |  |  |
-| Sysbench Mem Read (MiB/s) | **64077.85** | **93442.83** | **99129.32** |
-| Sysbench Mem Write (MiB/s) | **65255.63** | **106086.65** | **47919.66** |
+| Sysbench Mem Read (MiB/s) | **26468.99** | **87349.9** | **100682.98** |
+| Sysbench Mem Write (MiB/s) | **42583.37** | **107737.74** | **44572.27** |
 | **🚀 Disk IOPS & Throughput (fio)** |  |  |  |
-| 4K Random Read IOPS | **65932.7** | **19372.9** | **19548.5** |
-| 4K Random Read Latency (ms) | 0.218 | 3.301 | 3.268 |
-| 4K Random Read Bandwidth (MB/s) | 257.55 | 75.68 | 76.36 |
-| 4K Random Write IOPS | **27731.6** | **19939.4** | **19571.1** |
-| 4K Random Write Latency (ms) | 0.534 | 3.207 | 3.263 |
-| 4K Random Write Bandwidth (MB/s) | 108.33 | 77.89 | 76.45 |
-| 1M Sequential Read (MB/s) | **10510.85** | **372.54** | **405.16** |
-| 1M Sequential Write (MB/s) | **7924.02** | **325.34** | **406.04** |
-| 4K Mixed 70/30 Total IOPS | **29171.2** | **19527.0** | **19649.8** |
+| 4K Random Read IOPS | **40882.7** | **20066.5** | **19527.3** |
+| 4K Random Read Latency (ms) | 0.361 | 3.183 | 3.271 |
+| 4K Random Read Bandwidth (MB/s) | 159.7 | 78.38 | 76.28 |
+| 4K Random Write IOPS | **25823.8** | **20087.4** | **19614.9** |
+| 4K Random Write Latency (ms) | 0.572 | 3.178 | 3.257 |
+| 4K Random Write Bandwidth (MB/s) | 100.87 | 78.47 | 76.62 |
+| 1M Sequential Read (MB/s) | **8170.57** | **404.76** | **406.69** |
+| 1M Sequential Write (MB/s) | **6484.5** | **343.12** | **405.48** |
+| 4K Mixed 70/30 Total IOPS | **37376.5** | **20106.8** | **19596.5** |
 
 
 <!-- BENCHMARK_RESULTS_END -->
