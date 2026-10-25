@@ -1,6 +1,6 @@
 {
   "runner_label": "macos-15-intel",
-  "timestamp": "2026-10-25T16:10:05Z",
+  "timestamp": "2026-10-25T16:26:29Z",
   "sys_info": {
     "os_name": "macOS 15.7.9",
     "kernel": "24.6.0",
@@ -10,35 +10,35 @@
     "mem_total_gb": 14.0,
     "mem_avail_gb": 14.0,
     "disk_total_gb": 324.68,
-    "disk_free_gb": 108.42
+    "disk_free_gb": 108.41
   },
   "sha256": {
-    "sha256_mb_per_sec": 381.68,
-    "time_sec": 0.131
+    "sha256_mb_per_sec": 410.21,
+    "time_sec": 0.122
   },
   "cpu": {
-    "single_thread_eps": 3864385.17,
+    "single_thread_eps": 3442330.88,
     "single_thread_lat_avg_ms": 0.0,
-    "multi_thread_eps": 12170578.96,
+    "multi_thread_eps": 10160445.05,
     "multi_thread_lat_avg_ms": 0.0
   },
   "memory": {
-    "mem_read_mib_sec": 93568.96,
-    "mem_write_mib_sec": 54190.5
+    "mem_read_mib_sec": 69581.76,
+    "mem_write_mib_sec": 38478.3
   },
   "disk": {
-    "randread_4k_iops": 10190.8,
-    "randread_4k_bw_mb_s": 39.81,
-    "randread_4k_lat_ms": 1.386,
-    "randwrite_4k_iops": 9034.5,
-    "randwrite_4k_bw_mb_s": 35.29,
-    "randwrite_4k_lat_ms": 1.524,
-    "seqread_1m_bw_mb_s": 3969.21,
-    "seqread_1m_iops": 3969.2,
-    "seqwrite_1m_bw_mb_s": 3872.26,
-    "seqwrite_1m_iops": 3872.3,
-    "mixed_4k_read_iops": 5499.3,
-    "mixed_4k_write_iops": 5472.7,
-    "mixed_4k_total_iops": 10972.0
+    "randread_4k_iops": 8458.9,
+    "randread_4k_bw_mb_s": 33.04,
+    "randread_4k_lat_ms": 1.713,
+    "randwrite_4k_iops": 6555.7,
+    "randwrite_4k_bw_mb_s": 25.61,
+    "randwrite_4k_lat_ms": 2.221,
+    "seqread_1m_bw_mb_s": 2738.3,
+    "seqread_1m_iops": 2738.3,
+    "seqwrite_1m_bw_mb_s": 2142.29,
+    "seqwrite_1m_iops": 2142.3,
+    "mixed_4k_read_iops": 3365.6,
+    "mixed_4k_write_iops": 3371.3,
+    "mixed_4k_total_iops": 6737.0
   }
 }

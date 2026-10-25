@@ -1,44 +1,44 @@
 {
   "runner_label": "ubuntu-latest",
-  "timestamp": "2026-10-25T16:10:01Z",
+  "timestamp": "2026-10-25T16:26:31Z",
   "sys_info": {
     "os_name": "Ubuntu 24.04.5 LTS",
     "kernel": "6.17.0-1022-azure",
     "arch": "x86_64",
-    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "cpu_model": "AMD EPYC 9V45 96-Core Processor",
     "cpu_cores": 4,
     "mem_total_gb": 15.61,
-    "mem_avail_gb": 14.59,
+    "mem_avail_gb": 14.51,
     "disk_total_gb": 144.26,
     "disk_free_gb": 85.36
   },
   "sha256": {
-    "sha256_mb_per_sec": 1499.94,
-    "time_sec": 0.033
+    "sha256_mb_per_sec": 1981.21,
+    "time_sec": 0.025
   },
   "cpu": {
-    "single_thread_eps": 1441.57,
-    "single_thread_lat_avg_ms": 0.69,
-    "multi_thread_eps": 3148.47,
-    "multi_thread_lat_avg_ms": 1.27
+    "single_thread_eps": 1993.61,
+    "single_thread_lat_avg_ms": 0.5,
+    "multi_thread_eps": 4122.29,
+    "multi_thread_lat_avg_ms": 0.97
   },
   "memory": {
-    "mem_read_mib_sec": 99749.67,
-    "mem_write_mib_sec": 45690.64
+    "mem_read_mib_sec": 196816.13,
+    "mem_write_mib_sec": 63152.73
   },
   "disk": {
-    "randread_4k_iops": 19548.5,
-    "randread_4k_bw_mb_s": 76.36,
-    "randread_4k_lat_ms": 3.267,
-    "randwrite_4k_iops": 19646.3,
-    "randwrite_4k_bw_mb_s": 76.74,
-    "randwrite_4k_lat_ms": 3.25,
-    "seqread_1m_bw_mb_s": 405.48,
-    "seqread_1m_iops": 405.5,
-    "seqwrite_1m_bw_mb_s": 405.32,
-    "seqwrite_1m_iops": 405.3,
-    "mixed_4k_read_iops": 9801.6,
-    "mixed_4k_write_iops": 9782.2,
-    "mixed_4k_total_iops": 19583.9
+    "randread_4k_iops": 19948.8,
+    "randread_4k_bw_mb_s": 77.93,
+    "randread_4k_lat_ms": 3.204,
+    "randwrite_4k_iops": 20029.0,
+    "randwrite_4k_bw_mb_s": 78.24,
+    "randwrite_4k_lat_ms": 3.19,
+    "seqread_1m_bw_mb_s": 398.76,
+    "seqread_1m_iops": 398.8,
+    "seqwrite_1m_bw_mb_s": 268.15,
+    "seqwrite_1m_iops": 268.2,
+    "mixed_4k_read_iops": 10063.3,
+    "mixed_4k_write_iops": 10045.8,
+    "mixed_4k_total_iops": 20109.1
   }
 }
