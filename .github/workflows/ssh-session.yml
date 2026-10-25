@@ -1,0 +1,31 @@
+name: Interactive ARM64 SSH Session
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_hours:
+        description: "Duration to keep the session alive (in hours, max 6)"
+        required: false
+        default: "2"
+
+jobs:
+  ssh-session:
+    name: ARM64 SSH Session (ubuntu-24.04-arm)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120 # Keeps alive for up to 2 hours
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Print System Info
+        run: |
+          echo "=== Runner Environment ==="
+          uname -a
+          lscpu
+          free -h
+          df -h
+
+      - name: Start Interactive SSH Session (tmate)
+        uses: mxschmitt/action-tmate@v3
+        with:
+          detached: false # Blocks until timeout (2 hours) or manual termination
