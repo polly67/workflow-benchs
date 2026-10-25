@@ -34,7 +34,9 @@ def get_sys_info():
 
     # CPU Model
     cpu_model = "Unknown"
-    if os.path.exists("/proc/cpuinfo"):
+    if system == "Darwin":
+        cpu_model = run_cmd("sysctl -n machdep.cpu.brand_string")
+    elif os.path.exists("/proc/cpuinfo"):
         with open("/proc/cpuinfo", "r") as f:
             for line in f:
                 if "model name" in line:
@@ -56,7 +58,14 @@ def get_sys_info():
     # Memory
     mem_total_gb = 0.0
     mem_avail_gb = 0.0
-    if os.path.exists("/proc/meminfo"):
+    if system == "Darwin":
+        try:
+            mem_bytes = int(run_cmd("sysctl -n hw.memsize"))
+            mem_total_gb = round(mem_bytes / (1024**3), 2)
+            mem_avail_gb = mem_total_gb
+        except Exception:
+            pass
+    elif os.path.exists("/proc/meminfo"):
         with open("/proc/meminfo", "r") as f:
             for line in f:
                 if line.startswith("MemTotal:"):
@@ -71,7 +80,9 @@ def get_sys_info():
 
     # OS name
     os_name = "Linux"
-    if os.path.exists("/etc/os-release"):
+    if system == "Darwin":
+        os_name = f"macOS {platform.mac_ver()[0]}"
+    elif os.path.exists("/etc/os-release"):
         with open("/etc/os-release") as f:
             for line in f:
                 if line.startswith("PRETTY_NAME="):
@@ -164,8 +175,9 @@ def bench_sysbench_memory():
     return results
 
 def run_fio_job(name, rw, bs, iodepth, direct, test_file, runtime=10):
+    ioengine = "posixaio" if platform.system() == "Darwin" else "libaio"
     cmd = [
-        "fio", f"--name={name}", "--ioengine=libaio", f"--iodepth={iodepth}",
+        "fio", f"--name={name}", f"--ioengine={ioengine}", f"--iodepth={iodepth}",
         f"--rw={rw}", f"--bs={bs}", f"--direct={direct}", "--size=1G",
         f"--runtime={runtime}", "--time_based=1", "--output-format=json",
         f"--filename={test_file}"

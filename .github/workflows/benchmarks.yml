@@ -1,4 +1,4 @@
-name: Runner Benchmarks (ARM64 vs x86-64)
+name: Runner Benchmarks (x86-64 vs ARM64 vs macOS Apple Silicon)
 
 on:
   push:
@@ -16,8 +16,9 @@ jobs:
       fail-fast: false
       matrix:
         runner:
-          - ubuntu-latest      # 4 vCPU, 16 GB RAM (x86_64)
-          - ubuntu-24.04-arm   # 4 vCPU, 16 GB RAM (ARM64)
+          - ubuntu-latest      # 4 vCPU, 16 GB RAM (x86_64 AMD EPYC)
+          - ubuntu-24.04-arm   # 4 vCPU, 16 GB RAM (ARM64 Neoverse-N2)
+          - macos-latest       # 3 vCPU, 7 GB RAM (Apple Silicon M-Series)
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -27,10 +28,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Benchmark Dependencies
+      - name: Install Benchmark Dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y fio sysbench
+
+      - name: Install Benchmark Dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install fio sysbench
 
       - name: Run Benchmarks
         run: |
@@ -79,7 +86,7 @@ jobs:
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add results/ README.md
           if ! git diff --staged --quiet; then
-            git commit -m "docs: update benchmark results from run $GITHUB_RUN_NUMBER [skip ci]"
+            git commit -m "docs: update benchmark results including macos-latest [skip ci]"
             git push
           else
             echo "No changes to commit"
