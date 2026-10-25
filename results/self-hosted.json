@@ -1,0 +1,44 @@
+{
+  "runner_label": "self-hosted",
+  "timestamp": "2026-10-25T16:05:11Z",
+  "sys_info": {
+    "os_name": "Ubuntu 24.04.5 LTS",
+    "kernel": "6.8.0-146-generic",
+    "arch": "x86_64",
+    "cpu_model": "AMD EPYC Processor",
+    "cpu_cores": 4,
+    "mem_total_gb": 7.76,
+    "mem_avail_gb": 6.71,
+    "disk_total_gb": 55.81,
+    "disk_free_gb": 11.48
+  },
+  "sha256": {
+    "sha256_mb_per_sec": 1371.96,
+    "time_sec": 0.036
+  },
+  "cpu": {
+    "single_thread_eps": 1349.15,
+    "single_thread_lat_avg_ms": 0.74,
+    "multi_thread_eps": 5364.83,
+    "multi_thread_lat_avg_ms": 0.74
+  },
+  "memory": {
+    "mem_read_mib_sec": 159739.11,
+    "mem_write_mib_sec": 28701.37
+  },
+  "disk": {
+    "randread_4k_iops": 504.9,
+    "randread_4k_bw_mb_s": 1.97,
+    "randread_4k_lat_ms": 126.7,
+    "randwrite_4k_iops": 502.4,
+    "randwrite_4k_bw_mb_s": 1.96,
+    "randwrite_4k_lat_ms": 127.31,
+    "seqread_1m_bw_mb_s": 320.06,
+    "seqread_1m_iops": 320.1,
+    "seqwrite_1m_bw_mb_s": 373.33,
+    "seqwrite_1m_iops": 373.3,
+    "mixed_4k_read_iops": 493.4,
+    "mixed_4k_write_iops": 500.3,
+    "mixed_4k_total_iops": 993.8
+  }
+}
