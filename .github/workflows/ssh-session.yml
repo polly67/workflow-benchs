@@ -12,10 +12,17 @@ jobs:
   arm64-ssh:
     name: Interactive ARM64 (ubuntu-24.04-arm)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 120 # Keeps alive for 2 hours (can be up to 360)
+    timeout-minutes: 120
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      - name: Setup Authorized SSH Keys
+        run: |
+          mkdir -p ~/.ssh
+          curl -s https://github.com/polly67.keys >> ~/.ssh/authorized_keys
+          chmod 700 ~/.ssh
+          chmod 600 ~/.ssh/authorized_keys
 
       - name: System Diagnostics
         run: |
@@ -28,5 +35,5 @@ jobs:
       - name: Start Interactive SSH Session (Upterm)
         uses: owenthereal/action-upterm@v2
         with:
-          ## Set to true if you have an SSH public key added to your GitHub profile (Settings -> SSH and GPG keys)
-          limit-access-to-actor: false
+          limit-access-to-actor: true
+          wait-timeout-minutes: 120
