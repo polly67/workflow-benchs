@@ -4,6 +4,11 @@ on:
   push:
     branches: [ main ]
   workflow_dispatch:
+    inputs:
+      test_trigger:
+        description: "Trigger manual run"
+        required: false
+        default: "manual"
 
 permissions:
   contents: write
