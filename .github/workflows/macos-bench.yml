@@ -1,0 +1,40 @@
+name: Test macOS Latest Hardware Pool
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos-probe:
+    name: Probe macOS Latest Runner
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Inspect Hardware Specs
+        run: |
+          echo "=== macOS Runner Hardware Probe ==="
+          echo "CPU: $(sysctl -n machdep.cpu.brand_string)"
+          echo "vCPUs: $(sysctl -n hw.ncpu)"
+          echo "RAM: $(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 )) GB"
+          echo "OS: $(sw_vers -productVersion)"
+          uname -a
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Benchmark Dependencies
+        run: |
+          brew install fio sysbench
+
+      - name: Run Benchmark Suite
+        run: |
+          chmod +x scripts/benchmark.py
+          python3 scripts/benchmark.py "macos-latest"
