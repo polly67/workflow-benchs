@@ -1,0 +1,86 @@
+name: Runner Benchmarks (ARM64 vs x86-64)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    name: Benchmark ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - ubuntu-latest      # 4 vCPU, 16 GB RAM (x86_64)
+          - ubuntu-24.04-arm   # 4 vCPU, 16 GB RAM (ARM64)
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Benchmark Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fio sysbench
+
+      - name: Run Benchmarks
+        run: |
+          chmod +x scripts/benchmark.py
+          python3 scripts/benchmark.py "${{ matrix.runner }}"
+
+      - name: Upload Result Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: result-${{ matrix.runner }}
+          path: results/${{ matrix.runner }}.json
+          retention-days: 7
+
+  aggregate:
+    name: Aggregate & Compare
+    needs: [benchmark]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: result-*
+          path: downloaded-results
+
+      - name: Consolidate Results & Compare
+        run: |
+          mkdir -p results
+          find downloaded-results -type f -name "*.json" -exec cp {} results/ \;
+          ls -la results/
+          chmod +x scripts/compare.py
+          python3 scripts/compare.py
+
+      - name: Commit & Push Updated Results
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add results/ README.md
+          if ! git diff --staged --quiet; then
+            git commit -m "docs: update benchmark results from run $GITHUB_RUN_NUMBER [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
