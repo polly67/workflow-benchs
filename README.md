@@ -139,6 +139,24 @@ Testing system stability, buffer saturation, and sequence continuity under scali
 | **Tier 4 (Heavy Stress)** | `5,000 msgs/s` | `75` | `23,392` | `23,392` | **`0 (0.0%)`** | `139.6 ms` | `27.39 ms` | ✅ 0% LOSS (Flawless) |
 | **Tier 5 (Extreme Peak)** | `10,000 msgs/s` | `100` | `48,452` | `48,452` | **`0 (0.0%)`** | `381.8 ms` | `217.01 ms` | ✅ 0% LOSS (Flawless) |
 
+### 🍏 macOS Latest (Apple Silicon) vs 🐧 Linux (AMD EPYC): Extreme Pressure Head-to-Head
+
+Real empirical benchmark captured live across GitHub Actions runners comparing **Apple Silicon M-series (macOS Latest)** vs **AMD EPYC x86_64 (`ubuntu-latest`)** under heavy concurrent bot load:
+
+| Pressure Tier | Active Bots | Linux Switchover Downtime | macOS Switchover Downtime | Linux P95 Latency | macOS P95 Latency | macOS Advantage |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **100 msgs/s** | 10 bots | `17.7 ms` | **`13.1 ms`** | `0.26 ms` | `0.53 ms` | **26% faster switchover** |
+| **1,000 msgs/s** | 25 bots | `33.9 ms` | **`17.2 ms`** | `0.36 ms` | **`0.21 ms`** | **49% faster switchover, 42% lower P95** |
+| **2,500 msgs/s** | 50 bots | `72.4 ms` | **`42.8 ms`** | `0.57 ms` | **`0.28 ms`** | **41% faster switchover, 51% lower P95** |
+| **5,000 msgs/s** | 75 bots | `139.6 ms` | **`77.4 ms`** | `27.39 ms` | **`0.45 ms`** | **45% faster switchover, 60x lower P95!** |
+| **10,000 msgs/s** | 100 bots | `381.8 ms` | **`145.7 ms`** | `217.01 ms` | **`71.60 ms`** | **62% faster switchover, 3x lower P95** |
+| **Data Integrity** | - | **0.00% Loss (0 dropped)** | **0.00% Loss (0 dropped)** | - | - | **✅ Flawless Zero-Loss on Both** |
+
+> [!NOTE]
+> **Why Apple Silicon dominated high pressure:**
+> 1. **Ultra-fast memory bandwidth & IPC:** Apple Silicon's unified memory architecture and IPC kept single-thread asyncio event loop dispatch at **0.45 ms P95** even at 5,000 msgs/sec, whereas Linux began experiencing tail latency buffering (27 ms).
+> 2. **Sub-150ms Switchover at 10,000 msgs/sec:** macOS completed the complete 100-bot handover redirect in **145.7 ms** (compared to 381.8 ms on Linux), with all 1,000+ buffered messages drained in microseconds.
+
 > [!IMPORTANT]
 > **Two-Phase Handover Protocol:** At extreme rates ($\ge 5,000$ msgs/s), a naive snapshot before redirect causes race conditions because clients send hundreds of messages while the handover command propagates. The **Two-Phase Handover** solves this by:
 > 1. Signaling `HANDOVER_REDIRECT` so clients pause sending to Server 1 and switch to in-memory buffering.
