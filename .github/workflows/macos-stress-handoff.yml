@@ -2,9 +2,7 @@ name: macOS Latest Extreme Pressure Handoff Benchmark
 
 on:
   push:
-    paths:
-      - '.github/workflows/macos-stress-handoff.yml'
-      - 'results/macos_trigger.txt'
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       rate:

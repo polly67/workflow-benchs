@@ -1,8 +1,6 @@
 name: Runner Benchmarks (x86 vs ARM vs macOS vs Self-Hosted)
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 permissions:

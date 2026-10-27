@@ -1,8 +1,6 @@
 name: Check KVM & Virtualization Support
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
     inputs:
       test_trigger:

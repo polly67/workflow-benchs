@@ -1,8 +1,6 @@
 name: Test macOS Latest Hardware Pool
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 permissions:

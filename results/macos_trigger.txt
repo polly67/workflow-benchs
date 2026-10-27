@@ -1,2 +1,2 @@
-Trigger macOS Latest Extreme Pressure Benchmark: 2026-10-27T13:52:50Z
-Testing 100 to 10,000 msgs/sec across Apple Silicon M-series.
+Run macOS Extreme Pressure Benchmark: 2026-10-27T13:54:40Z
+Testing macOS latest (Apple Silicon) under 100 to 10,000 msgs/s.
