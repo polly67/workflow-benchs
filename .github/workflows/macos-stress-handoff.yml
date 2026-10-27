@@ -1,6 +1,10 @@
 name: macOS Latest Extreme Pressure Handoff Benchmark
 
 on:
+  push:
+    paths:
+      - '.github/workflows/macos-stress-handoff.yml'
+      - 'results/macos_trigger.txt'
   workflow_dispatch:
     inputs:
       rate:
@@ -66,6 +70,18 @@ jobs:
             fi
           elif [ "$MODE" = "simulation" ]; then
             python3 scripts/benchmark_handoff.py --mode simulation --rate "$RATE" --bots 50 --duration 6 --handover-lead 3 --buffer-mode buffered
+          fi
+
+      - name: Commit macOS Benchmark Results
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f results/EXTREME_PRESSURE_BENCHMARK.md ]; then
+            cp results/EXTREME_PRESSURE_BENCHMARK.md results/MACOS_EXTREME_PRESSURE.md
+            git add results/MACOS_EXTREME_PRESSURE.md
+            git commit -m "docs: add macOS Latest extreme pressure benchmark results [skip ci]" || true
+            git pull --rebase origin main || true
+            git push origin main || true
           fi
 
       - name: Upload macOS Benchmark Artifacts
