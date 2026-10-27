@@ -92,6 +92,8 @@ class MessageServer:
                     self.total_received += 1
                     self.recent_count += 1
                     self.tracker.record_message(msg, self.server_id)
+                    if self.total_received == 1:
+                        logger.info(f"[{self.server_id}] Received first message: seq={msg.seq} from {msg.sender}")
 
                     # Broadcast to other bots if recipient is 'all'
                     if len(self.bot_clients) > 1 and data.get("broadcast", False):

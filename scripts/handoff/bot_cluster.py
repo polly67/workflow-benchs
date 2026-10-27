@@ -208,37 +208,43 @@ class BotCluster:
         self._traffic_task = asyncio.create_task(self._generate_traffic())
 
     async def _generate_traffic(self):
-        dt = 1.0 / self.target_rate
-        start_time = time.perf_counter()
-        bot_idx = 0
-        all_bot_ids = [b.bot_id for b in self.bots]
+        try:
+            logger.info(f"BotCluster traffic generator started for {len(self.bots)} bots at {self.target_rate} mps")
+            dt = 1.0 / self.target_rate
+            start_time = time.perf_counter()
+            bot_idx = 0
+            all_bot_ids = [b.bot_id for b in self.bots]
 
-        while self.running:
-            self.current_seq += 1
-            seq = self.current_seq
-            self.total_sent += 1
+            while self.running:
+                self.current_seq += 1
+                seq = self.current_seq
+                self.total_sent += 1
 
-            sender_bot = self.bots[bot_idx % len(self.bots)]
-            bot_idx += 1
-            recip = random.choice([b for b in all_bot_ids if b != sender_bot.bot_id] or ["all"])
-            template = random.choice(CHAT_TEMPLATES)
-            payload = template.format(seq=seq, shard=random.randint(1, 16))
+                sender_bot = self.bots[bot_idx % len(self.bots)]
+                bot_idx += 1
+                recip = random.choice([b for b in all_bot_ids if b != sender_bot.bot_id] or ["all"])
+                template = random.choice(CHAT_TEMPLATES)
+                payload = template.format(seq=seq, shard=random.randint(1, 16))
 
-            msg = ChatMessage(
-                seq=seq,
-                sender=sender_bot.bot_id,
-                recipient=recip,
-                timestamp=time.time(),
-                payload=payload
-            )
+                msg = ChatMessage(
+                    seq=seq,
+                    sender=sender_bot.bot_id,
+                    recipient=recip,
+                    timestamp=time.time(),
+                    payload=payload
+                )
 
-            await sender_bot.send_message(msg)
+                sent = await sender_bot.send_message(msg)
+                if seq == 1:
+                    logger.info(f"BotCluster successfully transmitted initial message seq=1 (status: {sent})")
 
-            # Precise pacer
-            target_t = start_time + self.total_sent * dt
-            now = time.perf_counter()
-            if target_t > now:
-                await asyncio.sleep(target_t - now)
+                # Precise pacer
+                target_t = start_time + self.total_sent * dt
+                now = time.perf_counter()
+                if target_t > now:
+                    await asyncio.sleep(target_t - now)
+        except Exception as e:
+            logger.exception(f"Unhandled exception in _generate_traffic: {e}")
 
     async def trigger_handover(self, new_url: str):
         logger.warning(f"[BotCluster] Manually triggering migration of all bots to {new_url}")
