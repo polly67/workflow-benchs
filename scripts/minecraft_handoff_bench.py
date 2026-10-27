@@ -243,9 +243,8 @@ def run_benchmark():
     server_jar = os.path.join(mc_source, "server.jar")
     if not os.path.exists(server_jar):
         print(f"  Downloading Purpur 1.20.4 to {server_jar}...")
-        import urllib.request
         url = "https://api.purpurmc.org/v2/purpur/1.20.4/latest/download"
-        urllib.request.urlretrieve(url, server_jar)
+        subprocess.run(["curl", "-sSL", "-A", "Mozilla/5.0", url, "-o", server_jar], check=True)
         print("  Download complete.")
 
     eula_file = os.path.join(mc_source, "eula.txt")
