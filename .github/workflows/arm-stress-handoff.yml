@@ -1,0 +1,81 @@
+name: ARM64 Ubuntu Extreme Pressure Handoff Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Benchmark mode: stress (100-10000 mps) | compare | simulation'
+        required: true
+        default: 'stress'
+        type: choice
+        options:
+          - 'stress'
+          - 'compare'
+          - 'simulation'
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  arm_stress:
+    name: ARM64 Ubuntu (Neoverse-N2) Stress Benchmark
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Inspect Hardware Specs
+        run: |
+          echo "=== ARM64 System Architecture ==="
+          uname -m
+          lscpu | grep -E "Model name|Architecture|CPU\(s\):|Thread" || true
+          free -h
+          python3 --version
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install websockets requests
+
+      - name: Run Extreme Pressure Benchmark
+        env:
+          PYTHONPATH: .
+        run: |
+          MODE="${{ github.event.inputs.mode || 'stress' }}"
+          echo "Running benchmark on ARM64 Ubuntu with mode: $MODE"
+
+          if [ "$MODE" = "stress" ]; then
+            python3 scripts/benchmark_handoff.py --mode stress
+            if [ -f results/EXTREME_PRESSURE_BENCHMARK.md ]; then
+              cat results/EXTREME_PRESSURE_BENCHMARK.md >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "$MODE" = "compare" ]; then
+            python3 scripts/benchmark_handoff.py --mode compare
+            if [ -f results/HANDOVER_COMPARISON.md ]; then
+              cat results/HANDOVER_COMPARISON.md >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+      - name: Commit ARM64 Benchmark Results
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f results/EXTREME_PRESSURE_BENCHMARK.md ]; then
+            cp results/EXTREME_PRESSURE_BENCHMARK.md results/ARM_EXTREME_PRESSURE.md
+            git add results/ARM_EXTREME_PRESSURE.md
+            git commit -m "docs: add ARM64 Ubuntu extreme pressure benchmark results [skip ci]" || true
+            git pull --rebase origin main || true
+            git push origin main || true
+          fi
+
+      - name: Upload ARM64 Benchmark Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm-handoff-results
+          path: results/
