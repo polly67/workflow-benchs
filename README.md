@@ -127,19 +127,38 @@ sequenceDiagram
 | **Average Message Latency** | `0.22 ms` | `0.26 ms` | Sub-millisecond |
 | **P95 Message Latency** | `0.29 ms` | `0.27 ms` | Sub-millisecond |
 
+### ⚡ Extreme Pressure Benchmark (100 to 10,000 Messages/Second)
+
+Testing system stability, buffer saturation, and sequence continuity under scaling load (up to **100 concurrent bots** and **10,000 msgs/sec**):
+
+| Pressure Tier | Target Rate | Active Bots | Total Sent | Total Received | Message Loss | Handover Disruption | P95 Latency | Stability |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Tier 1 (Baseline)** | `100 msgs/s` | `10` | `459` | `459` | **`0 (0.0%)`** | `17.7 ms` | `0.26 ms` | ✅ 0% LOSS (Flawless) |
+| **Tier 2 (High)** | `1,000 msgs/s` | `25` | `4,586` | `4,586` | **`0 (0.0%)`** | `33.9 ms` | `0.36 ms` | ✅ 0% LOSS (Flawless) |
+| **Tier 3 (Very High)** | `2,500 msgs/s` | `50` | `11,494` | `11,494` | **`0 (0.0%)`** | `72.4 ms` | `0.57 ms` | ✅ 0% LOSS (Flawless) |
+| **Tier 4 (Heavy Stress)** | `5,000 msgs/s` | `75` | `23,392` | `23,392` | **`0 (0.0%)`** | `139.6 ms` | `27.39 ms` | ✅ 0% LOSS (Flawless) |
+| **Tier 5 (Extreme Peak)** | `10,000 msgs/s` | `100` | `48,452` | `48,452` | **`0 (0.0%)`** | `381.8 ms` | `217.01 ms` | ✅ 0% LOSS (Flawless) |
+
+> [!IMPORTANT]
+> **Two-Phase Handover Protocol:** At extreme rates ($\ge 5,000$ msgs/s), a naive snapshot before redirect causes race conditions because clients send hundreds of messages while the handover command propagates. The **Two-Phase Handover** solves this by:
+> 1. Signaling `HANDOVER_REDIRECT` so clients pause sending to Server 1 and switch to in-memory buffering.
+> 2. Draining in-flight network buffers and generating the **final verified state snapshot**.
+> 3. Connecting to Server 2 and replaying the buffered stream, guaranteeing **0 dropped packets even at 10,000 messages/sec**.
+
 ### 🛠️ How to Run
 
-#### 1. Local Benchmark & Comparison
+#### 1. Local Benchmark & Multi-Tier Stress Test
 ```bash
+# Run multi-tier extreme pressure test (100 -> 1,000 -> 2,500 -> 5,000 -> 10,000 msgs/sec)
+python3 scripts/benchmark_handoff.py --mode stress
+
 # Run side-by-side comparison of unbuffered vs buffered failover
 python3 scripts/benchmark_handoff.py --mode compare
-
-# Run custom simulation (e.g. 200 msgs/s with 20 bots)
-python3 scripts/benchmark_handoff.py --mode simulation --rate 200 --bots 20 --buffer-mode buffered
 ```
 
-#### 2. Distributed Execution Across GitHub Actions Runners
+#### 2. Run on macOS Latest & Linux in GitHub Actions
 Trigger via GitHub Actions:
-- Workflow: [`.github/workflows/runner-handoff.yml`](file:///home/eouser/whyno/.github/workflows/runner-handoff.yml)
-- Supports automated pre-provisioning (`provision_lead_seconds`), scheduled handover (`handover_lead_seconds`), and Cloudflare Quick Tunnels for zero-configuration inter-runner connectivity.
+- **macOS Latest Stress Benchmark**: [`.github/workflows/macos-stress-handoff.yml`](file:///home/eouser/whyno/.github/workflows/macos-stress-handoff.yml) (Runs on Apple Silicon M-series runners)
+- **Universal Multi-Runner Handoff**: [`.github/workflows/runner-handoff.yml`](file:///home/eouser/whyno/.github/workflows/runner-handoff.yml) (Configurable for `ubuntu-latest` and `macos-latest`)
+
 

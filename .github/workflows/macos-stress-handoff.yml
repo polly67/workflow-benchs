@@ -1,0 +1,76 @@
+name: macOS Latest Extreme Pressure Handoff Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      rate:
+        description: 'Single tier rate (if running simulation) or leave blank for multi-tier stress'
+        required: false
+        default: '1000'
+      mode:
+        description: 'Benchmark mode: stress (100-10000 mps) | compare | simulation'
+        required: true
+        default: 'stress'
+        type: choice
+        options:
+          - 'stress'
+          - 'compare'
+          - 'simulation'
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  macos_stress:
+    name: macOS Latest (Apple Silicon M-series) Stress Benchmark
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Inspect Hardware Specs
+        run: |
+          echo "=== macOS System Architecture ==="
+          sysctl -n machdep.cpu.brand_string || uname -m
+          sysctl hw.ncpu hw.physicalcpu hw.memsize
+          python3 --version
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install websockets requests
+
+      - name: Run Extreme Pressure Benchmark
+        env:
+          PYTHONPATH: .
+        run: |
+          MODE="${{ github.event.inputs.mode || 'stress' }}"
+          RATE="${{ github.event.inputs.rate || '1000' }}"
+
+          echo "Running benchmark on macOS Latest with mode: $MODE"
+
+          if [ "$MODE" = "stress" ]; then
+            python3 scripts/benchmark_handoff.py --mode stress
+            if [ -f results/EXTREME_PRESSURE_BENCHMARK.md ]; then
+              cat results/EXTREME_PRESSURE_BENCHMARK.md >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "$MODE" = "compare" ]; then
+            python3 scripts/benchmark_handoff.py --mode compare
+            if [ -f results/HANDOVER_COMPARISON.md ]; then
+              cat results/HANDOVER_COMPARISON.md >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "$MODE" = "simulation" ]; then
+            python3 scripts/benchmark_handoff.py --mode simulation --rate "$RATE" --bots 50 --duration 6 --handover-lead 3 --buffer-mode buffered
+          fi
+
+      - name: Upload macOS Benchmark Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-handoff-results
+          path: results/

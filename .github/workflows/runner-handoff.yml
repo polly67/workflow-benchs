@@ -4,15 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       role:
-        description: 'Execution Role: compare | full_simulation | runner1 | runner2'
+        description: 'Execution Role: compare | stress | full_simulation | runner1 | runner2'
         required: true
         default: 'compare'
         type: choice
         options:
           - 'compare'
+          - 'stress'
           - 'full_simulation'
           - 'runner1'
           - 'runner2'
+      runner_os:
+        description: 'Runner Operating System'
+        required: true
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'macos-latest'
       duration_seconds:
         description: 'Total duration in seconds (e.g. 60 for test, 18000 for 5h)'
         required: false
@@ -52,7 +61,7 @@ permissions:
 
 jobs:
   handoff_job:
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event.inputs.runner_os || 'ubuntu-latest' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -65,12 +74,19 @@ jobs:
       - name: Install dependencies & cloudflared
         run: |
           pip install websockets requests
-          if ! command -v cloudflared &> /dev/null; then
-            echo "Installing cloudflared..."
-            curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
-            sudo dpkg -i /tmp/cloudflared.deb
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            if ! command -v cloudflared &> /dev/null; then
+              echo "Installing cloudflared on Linux..."
+              curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+              sudo dpkg -i /tmp/cloudflared.deb
+            fi
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            if ! command -v cloudflared &> /dev/null; then
+              echo "Installing cloudflared on macOS..."
+              brew install cloudflared || true
+            fi
           fi
-          cloudflared --version
+          cloudflared --version || echo "cloudflared ready or optional"
 
       - name: Execute Handoff Benchmark
         env:
@@ -100,6 +116,11 @@ jobs:
             python3 scripts/benchmark_handoff.py --mode compare
             if [ -f results/HANDOVER_COMPARISON.md ]; then
               cat results/HANDOVER_COMPARISON.md >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "$ROLE" = "stress" ]; then
+            python3 scripts/benchmark_handoff.py --mode stress
+            if [ -f results/EXTREME_PRESSURE_BENCHMARK.md ]; then
+              cat results/EXTREME_PRESSURE_BENCHMARK.md >> $GITHUB_STEP_SUMMARY
             fi
           elif [ "$ROLE" = "full_simulation" ]; then
             python3 scripts/benchmark_handoff.py \
