@@ -139,23 +139,34 @@ Testing system stability, buffer saturation, and sequence continuity under scali
 | **Tier 4 (Heavy Stress)** | `5,000 msgs/s` | `75` | `23,392` | `23,392` | **`0 (0.0%)`** | `139.6 ms` | `27.39 ms` | ✅ 0% LOSS (Flawless) |
 | **Tier 5 (Extreme Peak)** | `10,000 msgs/s` | `100` | `48,452` | `48,452` | **`0 (0.0%)`** | `381.8 ms` | `217.01 ms` | ✅ 0% LOSS (Flawless) |
 
-### 🍏 macOS Latest (Apple Silicon) vs 🐧 Linux (AMD EPYC): Extreme Pressure Head-to-Head
+### 🏆 3-Way Runner Showdown: 🐧 Linux x86 vs ⚡ Linux ARM64 vs 🍏 macOS Apple Silicon
 
-Real empirical benchmark captured live across GitHub Actions runners comparing **Apple Silicon M-series (macOS Latest)** vs **AMD EPYC x86_64 (`ubuntu-latest`)** under heavy concurrent bot load:
+Real empirical benchmarks captured live across GitHub Actions runners under extreme pressure (100 to 10,000 messages/sec with up to 100 concurrent bots):
 
-| Pressure Tier | Active Bots | Linux Switchover Downtime | macOS Switchover Downtime | Linux P95 Latency | macOS P95 Latency | macOS Advantage |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **100 msgs/s** | 10 bots | `17.7 ms` | **`13.1 ms`** | `0.26 ms` | `0.53 ms` | **26% faster switchover** |
-| **1,000 msgs/s** | 25 bots | `33.9 ms` | **`17.2 ms`** | `0.36 ms` | **`0.21 ms`** | **49% faster switchover, 42% lower P95** |
-| **2,500 msgs/s** | 50 bots | `72.4 ms` | **`42.8 ms`** | `0.57 ms` | **`0.28 ms`** | **41% faster switchover, 51% lower P95** |
-| **5,000 msgs/s** | 75 bots | `139.6 ms` | **`77.4 ms`** | `27.39 ms` | **`0.45 ms`** | **45% faster switchover, 60x lower P95!** |
-| **10,000 msgs/s** | 100 bots | `381.8 ms` | **`145.7 ms`** | `217.01 ms` | **`71.60 ms`** | **62% faster switchover, 3x lower P95** |
-| **Data Integrity** | - | **0.00% Loss (0 dropped)** | **0.00% Loss (0 dropped)** | - | - | **✅ Flawless Zero-Loss on Both** |
+#### 1. Handover Switchover Downtime (Socket Migration Gap):
+| Pressure Tier | Active Bots | 🐧 Linux x86 (`ubuntu-latest`) | ⚡ Linux ARM64 (`ubuntu-24.04-arm`) | 🍏 macOS (`macos-latest`) | Winner |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **100 msgs/s** | 10 bots | `17.7 ms` | **`11.8 ms`** | `13.1 ms` | **⚡ ARM64 Ubuntu** (33% faster than x86) |
+| **1,000 msgs/s** | 25 bots | `33.9 ms` | `25.4 ms` | **`17.2 ms`** | **🍏 macOS** (50% faster than x86) |
+| **2,500 msgs/s** | 50 bots | `72.4 ms` | `54.3 ms` | **`42.8 ms`** | **🍏 macOS** (41% faster than x86) |
+| **5,000 msgs/s** | 75 bots | `139.6 ms` | `98.3 ms` | **`77.4 ms`** | **🍏 macOS** (45% faster than x86) |
+| **10,000 msgs/s** | 100 bots | `381.8 ms` | `179.4 ms` | **`145.7 ms`** | **🍏 macOS** (62% faster than x86) |
+
+#### 2. Message P95 Tail Latency:
+| Pressure Tier | Active Bots | 🐧 Linux x86 (`ubuntu-latest`) | ⚡ Linux ARM64 (`ubuntu-24.04-arm`) | 🍏 macOS (`macos-latest`) | Winner |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **100 msgs/s** | 10 bots | `0.26 ms` | **`0.20 ms`** | `0.53 ms` | **⚡ ARM64 Ubuntu** |
+| **1,000 msgs/s** | 25 bots | `0.36 ms` | `0.22 ms` | **`0.21 ms`** | **🍏 macOS / ⚡ ARM64** |
+| **2,500 msgs/s** | 50 bots | `0.57 ms` | `0.37 ms` | **`0.28 ms`** | **🍏 macOS** |
+| **5,000 msgs/s** | 75 bots | `27.39 ms` | `7.00 ms` | **`0.45 ms`** | **🍏 macOS** (60x lower than x86!) |
+| **10,000 msgs/s** | 100 bots | `217.01 ms` | **`52.46 ms`** | `71.60 ms` | **⚡ ARM64 Ubuntu** (4x lower than x86!) |
+| **Message Loss** | - | **0.00% (0 dropped)** | **0.00% (0 dropped)** | **0.00% (0 dropped)** | **✅ Flawless Zero-Loss on ALL** |
 
 > [!NOTE]
-> **Why Apple Silicon dominated high pressure:**
-> 1. **Ultra-fast memory bandwidth & IPC:** Apple Silicon's unified memory architecture and IPC kept single-thread asyncio event loop dispatch at **0.45 ms P95** even at 5,000 msgs/sec, whereas Linux began experiencing tail latency buffering (27 ms).
-> 2. **Sub-150ms Switchover at 10,000 msgs/sec:** macOS completed the complete 100-bot handover redirect in **145.7 ms** (compared to 381.8 ms on Linux), with all 1,000+ buffered messages drained in microseconds.
+> **Key Architecture Highlights Across Platforms:**
+> 1. **ARM64 Ubuntu (Neoverse-N2) crushes x86**: Linux ARM64 achieved **4x lower tail latency at 10,000 msgs/s (52.46 ms vs 217.01 ms)** and cut handover downtime in half compared to x86 AMD EPYC.
+> 2. **macOS Apple Silicon dominates 5,000 msgs/s**: Apple Silicon maintained **sub-millisecond P95 latency (`0.45 ms`)** and sub-80ms switchovers at 5,000 msgs/sec.
+> 3. **Both ARM architectures (Neoverse-N2 and Apple Silicon) significantly outperform x86-64** in high-concurrency async socket dispatch.
 
 > [!IMPORTANT]
 > **Two-Phase Handover Protocol:** At extreme rates ($\ge 5,000$ msgs/s), a naive snapshot before redirect causes race conditions because clients send hundreds of messages while the handover command propagates. The **Two-Phase Handover** solves this by:
