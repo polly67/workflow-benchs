@@ -24,6 +24,18 @@ CHAT_TEMPLATES = [
     "Network egress packet verified."
 ]
 
+def is_ws_open(ws) -> bool:
+    if ws is None:
+        return False
+    if hasattr(ws, "closed"):
+        return not ws.closed
+    if hasattr(ws, "state"):
+        try:
+            return ws.state.name == "OPEN"
+        except Exception:
+            return False
+    return True
+
 class BotAgent:
     def __init__(
         self,
@@ -74,7 +86,7 @@ class BotAgent:
 
     async def _receive_loop(self):
         while self.running:
-            if not self.ws or self.ws.closed:
+            if not self.is_connected or not is_ws_open(self.ws):
                 await asyncio.sleep(0.05)
                 continue
             try:
@@ -86,7 +98,9 @@ class BotAgent:
                     logger.warning(f"[{self.bot_id}] Received HANDOVER_REDIRECT -> {new_target}")
                     asyncio.create_task(self.migrate_to(new_target))
             except (websockets.exceptions.ConnectionClosed, asyncio.CancelledError):
-                break
+                if not self.running:
+                    break
+                await asyncio.sleep(0.05)
             except Exception:
                 await asyncio.sleep(0.05)
 
@@ -136,7 +150,7 @@ class BotAgent:
         self.is_handing_over = False
 
     async def send_message(self, msg: ChatMessage):
-        if self.is_connected and self.ws and not self.ws.closed:
+        if self.is_connected and is_ws_open(self.ws):
             try:
                 await self.ws.send(msg.to_json())
                 return True
@@ -258,7 +272,7 @@ class BotCluster:
         # Flush any remaining buffers
         if self.buffer_mode == "buffered":
             for bot in self.bots:
-                if bot.buffer and bot.ws and not bot.ws.closed:
+                if bot.buffer and is_ws_open(bot.ws):
                     while bot.buffer:
                         msg = bot.buffer.popleft()
                         try:

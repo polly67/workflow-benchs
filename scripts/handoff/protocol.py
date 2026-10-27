@@ -15,7 +15,9 @@ class ChatMessage:
     payload: str
 
     def to_json(self) -> str:
-        return json.dumps(asdict(self))
+        d = asdict(self)
+        d["type"] = "CHAT"
+        return json.dumps(d)
 
     @staticmethod
     def from_json(data: str) -> "ChatMessage":
@@ -39,7 +41,9 @@ class StateSnapshot:
     received_seqs: List[int] = field(default_factory=list)
 
     def to_json(self) -> str:
-        return json.dumps(asdict(self))
+        d = asdict(self)
+        d["type"] = "CHAT"
+        return json.dumps(d)
 
     @staticmethod
     def from_json(data: str) -> "StateSnapshot":
