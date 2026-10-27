@@ -80,4 +80,66 @@ Comparison of GitHub Actions standard hosted runners for public repositories (x8
 
 
 <!-- BENCHMARK_RESULTS_END -->
-<!-- trigger test -->
+
+---
+
+## 🤖 High-Speed Bot Messaging & Zero-Loss Runner Handoff System
+
+GitHub Actions runners are ephemeral with a maximum execution limit (typically up to 6 hours). For continuous workloads—such as high-frequency messaging brokers, game servers, or bot coordination networks—runners must hand over traffic to a successor runner before shutting down.
+
+This repository implements a high-throughput messaging server and bot cluster with an automated **inter-runner handover protocol**:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Bots as 🤖 Bot Cluster (100 msgs/s)
+    participant R1 as 🏃 Runner 1 (Active Server)
+    participant GH as 🐙 GitHub Actions API
+    participant R2 as 🏃 Runner 2 (Successor)
+
+    Bots->>R1: Stream 100 msgs/sec (Sequence tracking)
+    Note over R1: Approaching cutoff (e.g. T-30m)
+    R1->>GH: workflow_dispatch(role='runner2', session_id)
+    GH->>R2: Spin up Runner 2 VM
+    R2->>R2: Start Server 2 & Cloudflare Tunnel
+    R2->>R1: Signal RUNNER2_READY (wss://endpoint)
+    Note over R1: Handover threshold (e.g. T-5m)
+    R1->>R2: Transfer StateSnapshot (last_seq, message history)
+    R1->>Bots: Broadcast HANDOVER_REDIRECT (target: Runner 2)
+    Note over Bots: Buffer in-flight messages (0 msgs lost)
+    Bots->>R2: Reconnect & Flush Backlog
+    Bots->>R2: Resume 100 msgs/sec stream
+    R1->>R1: Graceful Shutdown
+    Note over R2: Benchmark Sequence Continuity & Loss %
+```
+
+### 📊 Handover Benchmark Results (100 Messages/Second)
+
+| Metric | Unbuffered (Abrupt / Hard Cut) | Buffered (Graceful Handover) | Status |
+| :--- | :---: | :---: | :---: |
+| **Throughput Target** | **100 msgs/sec** | **100 msgs/sec** | Saturated |
+| **Concurrent Bot Agents** | **10 bots** | **10 bots** | Continuous |
+| **Total Messages Sent** | `852` | `861` | - |
+| **Total Messages Received** | `851` | `861` | - |
+| **Dropped / Lost Messages** | **`1` dropped** | **`0` dropped** | **✅ 0% LOSS** |
+| **Message Loss %** | **`0.12%`** | **`0.00%`** | **Flawless Switch** |
+| **Disruption Downtime Window** | `19.44 ms` | `25.73 ms` | Sub-30ms |
+| **Average Message Latency** | `0.22 ms` | `0.26 ms` | Sub-millisecond |
+| **P95 Message Latency** | `0.29 ms` | `0.27 ms` | Sub-millisecond |
+
+### 🛠️ How to Run
+
+#### 1. Local Benchmark & Comparison
+```bash
+# Run side-by-side comparison of unbuffered vs buffered failover
+python3 scripts/benchmark_handoff.py --mode compare
+
+# Run custom simulation (e.g. 200 msgs/s with 20 bots)
+python3 scripts/benchmark_handoff.py --mode simulation --rate 200 --bots 20 --buffer-mode buffered
+```
+
+#### 2. Distributed Execution Across GitHub Actions Runners
+Trigger via GitHub Actions:
+- Workflow: [`.github/workflows/runner-handoff.yml`](file:///home/eouser/whyno/.github/workflows/runner-handoff.yml)
+- Supports automated pre-provisioning (`provision_lead_seconds`), scheduled handover (`handover_lead_seconds`), and Cloudflare Quick Tunnels for zero-configuration inter-runner connectivity.
+

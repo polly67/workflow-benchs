@@ -1,0 +1,138 @@
+name: High-Speed Bot Messaging & Zero-Loss Runner Handoff
+
+on:
+  workflow_dispatch:
+    inputs:
+      role:
+        description: 'Execution Role: compare | full_simulation | runner1 | runner2'
+        required: true
+        default: 'compare'
+        type: choice
+        options:
+          - 'compare'
+          - 'full_simulation'
+          - 'runner1'
+          - 'runner2'
+      duration_seconds:
+        description: 'Total duration in seconds (e.g. 60 for test, 18000 for 5h)'
+        required: false
+        default: '60'
+      provision_lead_seconds:
+        description: 'Lead time to trigger Runner 2 before shutdown (e.g. 25 for test, 1800 for 30m)'
+        required: false
+        default: '25'
+      handover_lead_seconds:
+        description: 'Lead time to execute handover before shutdown (e.g. 10 for test, 300 for 5m)'
+        required: false
+        default: '10'
+      rate:
+        description: 'Messages per second'
+        required: false
+        default: '100'
+      bots:
+        description: 'Number of concurrent bots'
+        required: false
+        default: '10'
+      buffer_mode:
+        description: 'Buffer mode: buffered (zero-loss) vs unbuffered (measure drops)'
+        required: false
+        default: 'buffered'
+        type: choice
+        options:
+          - 'buffered'
+          - 'unbuffered'
+      session_id:
+        description: 'Session ID for inter-runner correlation'
+        required: false
+        default: ''
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  handoff_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies & cloudflared
+        run: |
+          pip install websockets requests
+          if ! command -v cloudflared &> /dev/null; then
+            echo "Installing cloudflared..."
+            curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o /tmp/cloudflared.deb
+            sudo dpkg -i /tmp/cloudflared.deb
+          fi
+          cloudflared --version
+
+      - name: Execute Handoff Benchmark
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PYTHONPATH: .
+        run: |
+          ROLE="${{ github.event.inputs.role || 'compare' }}"
+          DURATION="${{ github.event.inputs.duration_seconds || '60' }}"
+          PROV_LEAD="${{ github.event.inputs.provision_lead_seconds || '25' }}"
+          HAND_LEAD="${{ github.event.inputs.handover_lead_seconds || '10' }}"
+          RATE="${{ github.event.inputs.rate || '100' }}"
+          BOTS="${{ github.event.inputs.bots || '10' }}"
+          BUF_MODE="${{ github.event.inputs.buffer_mode || 'buffered' }}"
+          SESS_ID="${{ github.event.inputs.session_id }}"
+
+          if [ -z "$SESS_ID" ]; then
+            SESS_ID="sess-$(date +%s)-$RANDOM"
+          fi
+
+          echo "=========================================================="
+          echo "Role: $ROLE | Session: $SESS_ID | Rate: $RATE msgs/s"
+          echo "Duration: $DURATION s | Prov Lead: $PROV_LEAD s | Handover Lead: $HAND_LEAD s"
+          echo "Buffer Mode: $BUF_MODE"
+          echo "=========================================================="
+
+          if [ "$ROLE" = "compare" ]; then
+            python3 scripts/benchmark_handoff.py --mode compare
+            if [ -f results/HANDOVER_COMPARISON.md ]; then
+              cat results/HANDOVER_COMPARISON.md >> $GITHUB_STEP_SUMMARY
+            fi
+          elif [ "$ROLE" = "full_simulation" ]; then
+            python3 scripts/benchmark_handoff.py \
+              --mode simulation \
+              --rate "$RATE" \
+              --bots "$BOTS" \
+              --duration "$DURATION" \
+              --provision-lead "$PROV_LEAD" \
+              --handover-lead "$HAND_LEAD" \
+              --buffer-mode "$BUF_MODE"
+          elif [ "$ROLE" = "runner1" ]; then
+            python3 scripts/benchmark_handoff.py \
+              --mode runner1 \
+              --rate "$RATE" \
+              --bots "$BOTS" \
+              --duration "$DURATION" \
+              --provision-lead "$PROV_LEAD" \
+              --handover-lead "$HAND_LEAD" \
+              --buffer-mode "$BUF_MODE" \
+              --session-id "$SESS_ID"
+          elif [ "$ROLE" = "runner2" ]; then
+            python3 scripts/benchmark_handoff.py \
+              --mode runner2 \
+              --rate "$RATE" \
+              --bots "$BOTS" \
+              --duration "$DURATION" \
+              --buffer-mode "$BUF_MODE" \
+              --session-id "$SESS_ID"
+          fi
+
+      - name: Upload Benchmark Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: handoff-results
+          path: results/
