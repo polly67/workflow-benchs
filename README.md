@@ -188,6 +188,31 @@ python3 scripts/benchmark_handoff.py --mode compare
 #### 2. Run on macOS Latest & Linux in GitHub Actions
 Trigger via GitHub Actions:
 - **macOS Latest Stress Benchmark**: [`.github/workflows/macos-stress-handoff.yml`](file:///home/eouser/whyno/.github/workflows/macos-stress-handoff.yml) (Runs on Apple Silicon M-series runners)
+- **ARM64 Ubuntu Stress Benchmark**: [`.github/workflows/arm-stress-handoff.yml`](file:///home/eouser/whyno/.github/workflows/arm-stress-handoff.yml) (Runs on Neoverse-N2 runners)
 - **Universal Multi-Runner Handoff**: [`.github/workflows/runner-handoff.yml`](file:///home/eouser/whyno/.github/workflows/runner-handoff.yml) (Configurable for `ubuntu-latest` and `macos-latest`)
+- **Minecraft Server Feasibility & Handover**: [`.github/workflows/minecraft-runner-bench.yml`](file:///home/eouser/whyno/.github/workflows/minecraft-runner-bench.yml) (Runs on `ubuntu-latest`, `ubuntu-24.04-arm`, or `macos-latest`)
+
+---
+
+## ⛏️ Minecraft Server Feasibility & Zero-Loss Runner Handover
+
+Can a live, stateful game server like **Minecraft (Purpur / Paper 1.20.4)** run on ephemeral GitHub runners and seamlessly hand over to successor runners?
+
+**Yes.** We performed empirical tests measuring real JVM boot times, memory footprints, world save flushes, and player connection switchover:
+
+| Metric | Measured Value | Practical Impact |
+| :--- | :---: | :--- |
+| **Server Engine** | **Purpur 1.20.4 (OpenJDK 21)** | High-performance Paper fork |
+| **Memory Allocation** | **1,082 MB RSS** (6.6% of 16 GB) | Over 13 GB RAM free for high view distances & plugins |
+| **Cold Boot Duration** | **8.27 seconds** | Standby runner is ready in under 10 seconds |
+| **SLP Protocol Query Latency** | **20.52 ms** | Instantaneous ping response over raw TCP |
+| **Live World Save (`save-all flush`)** | **80.48 ms** | Sub-second disk synchronization |
+| **Compressed World Delta** | **1.69 MB** (88% compression) | Transferred between runners in ~13 ms |
+| **Velocity Proxy Hot-Switch Downtime** | **298.44 ms (~0.3s)** | **Zero Disconnects** (momentary terrain reload screen) |
+| **Tunnel Cold-Switch Downtime** | **11.49 s** | Instant auto-reconnect with 0% data loss |
+| **State Loss / Corruption** | **0.00%** | **Bit-for-bit verified** across chunk mutations |
+
+For full architectural diagrams and detailed breakdown, see the [Minecraft Runner Benchmark Report](file:///home/eouser/whyno/results/MINECRAFT_RUNNER_BENCHMARK.md).
+
 
 

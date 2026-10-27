@@ -1,0 +1,19 @@
+# Virtual environments
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Minecraft test runtime files (keep scripts only)
+minecraft_test/
+*.jar
+cache/
+libraries/
+versions/
+world/
+world_nether/
+world_the_end/
+logs/
+*.log

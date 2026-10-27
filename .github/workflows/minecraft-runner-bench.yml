@@ -1,0 +1,68 @@
+name: Minecraft Server Runner Feasibility & Handover Benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_os:
+        description: 'Runner OS to test'
+        required: true
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'ubuntu-24.04-arm'
+          - 'macos-latest'
+
+permissions:
+  actions: write
+  contents: write
+
+jobs:
+  minecraft_bench:
+    name: Minecraft Benchmark on ${{ github.event.inputs.runner_os || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.inputs.runner_os || 'ubuntu-latest' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Hardware & JVM Info
+        run: |
+          echo "=== System & Architecture Info ==="
+          uname -a
+          python3 --version
+          java -version
+          if command -v lscpu &> /dev/null; then
+            lscpu | grep -E "Model name|Architecture|CPU\(s\):|Thread" || true
+          fi
+          if command -v free &> /dev/null; then
+            free -h || true
+          fi
+
+      - name: Run Minecraft Feasibility & Handover Benchmark
+        env:
+          PYTHONPATH: .
+        run: |
+          python3 scripts/minecraft_handoff_bench.py
+          if [ -f results/MINECRAFT_RUNNER_BENCHMARK.md ]; then
+            cat results/MINECRAFT_RUNNER_BENCHMARK.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Commit & Push Benchmark Results
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git pull --rebase origin main || true
+          git add results/MINECRAFT_RUNNER_BENCHMARK.md scripts/
+          git commit -m "docs: update Minecraft Runner benchmark results [skip ci]" || echo "No changes to commit"
+          git push origin main || echo "Push skipped or not permitted"
