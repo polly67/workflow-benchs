@@ -4,12 +4,12 @@ Empirical evaluation of running a high-performance **Purpur (Paper fork) 1.20.4*
 
 ## Executive Summary
 - **Feasibility:** **PASSED (Production Grade)**. GitHub standard runners (4 vCPUs, 16 GB RAM, NVMe SSD) provide more resources than typical $30–$50/mo commercial game server tiers.
-- **Memory Consumption:** Server RSS baseline is **1082.2 MB** (only **6.6%** of the runner's 16 GB capacity), leaving over 13 GB available for chunk caching and plugins.
-- **Live World Save:** `/save-all flush` executed in **80.48 ms**.
-- **World State Delta Size:** Compressed world delta (`world/`, `nether`, `the_end`) is **1.69 MB** (13.71 MB uncompressed).
+- **Memory Consumption:** Server RSS baseline is **1412.7 MB** (only **8.6%** of the runner's 16 GB capacity), leaving over 13 GB available for chunk caching and plugins.
+- **Live World Save:** `/save-all flush` executed in **33.18 ms**.
+- **World State Delta Size:** Compressed world delta (`world/`, `nether`, `the_end`) is **0.02 MB** (0.07 MB uncompressed).
 - **Player Cutover Window:**
-  - **Velocity Proxy Architecture (Hot Handover):** **298.44 ms** (~0.3s) seamless switchover without dropping TCP sessions.
-  - **Direct Tunnel Architecture (Cold Handover):** **11.49 s** single reconnect with 0% data loss.
+  - **Velocity Proxy Architecture (Hot Handover):** **140.2 ms** (~0.14s) seamless switchover without dropping TCP sessions.
+  - **Direct Tunnel Architecture (Cold Handover):** **18.12 s** single reconnect with 0% data loss.
 - **State Integrity:** **100% (0.00% loss)**, verified with automated world mutation checkpoints.
 
 ---
@@ -18,10 +18,10 @@ Empirical evaluation of running a high-performance **Purpur (Paper fork) 1.20.4*
 
 | Metric | Runner Specification | Notes |
 | :--- | :--- | :--- |
-| **Operating System** | `Linux 6.8.0-146-generic` | Linux x86_64 / ARM64 / macOS |
+| **Operating System** | `Linux 6.17.0-1022-azure` | Linux x86_64 / ARM64 / macOS |
 | **Compute Units** | `4 vCPUs` | High single-core clock for main tick thread |
 | **Memory Capacity** | `16,384 MB (16 GB)` | 4x to 8x standard entry-level Minecraft hosts |
-| **Java Runtime** | `openjdk version "21.0.12.1" 2026-08-18` | OpenJDK 21 LTS with G1GC garbage collection |
+| **Java Runtime** | `openjdk version "21.0.12.1" 2026-08-18 LTS` | OpenJDK 21 LTS with G1GC garbage collection |
 | **Server Engine** | `Purpur 1.20.4 (Build 2176)` | Highly optimized Paper-compatible server |
 | **Disk Storage** | High-speed NVMe | >20,000 IOPS for chunk streaming |
 
@@ -31,9 +31,9 @@ Empirical evaluation of running a high-performance **Purpur (Paper fork) 1.20.4*
 
 | Phase | Measurement | Result |
 | :--- | :--- | :--- |
-| **Cold Boot Duration** | Ready in `Done` log | **8.27 s** |
-| **Memory Footprint (RSS)** | `ps -o rss` | **1082.2 MB** |
-| **Minecraft SLP Ping** | Min / Avg / Max Latency | **1.24 ms / 20.52 ms / 164.9 ms** |
+| **Cold Boot Duration** | Ready in `Done` log | **34.2 s** |
+| **Memory Footprint (RSS)** | `ps -o rss` | **1412.7 MB** |
+| **Minecraft SLP Ping** | Min / Avg / Max Latency | **1.77 ms / 17.23 ms / 132.09 ms** |
 | **Max Player Configuration** | `server.properties` | **50 Players** |
 | **Tick Rate (TPS)** | Stable Tick Loop | **20.0 TPS** |
 
@@ -43,11 +43,11 @@ Empirical evaluation of running a high-performance **Purpur (Paper fork) 1.20.4*
 
 | Operation | Input Size | Output Size | Execution Latency |
 | :--- | :--- | :--- | :--- |
-| `save-all flush` | In-Memory Chunks | Flushed DiskMCA | **229.1 ms** |
-| Uncompressed TAR | 3 Dimensions (`world/`) | 13.71 MB | **17.59 ms** |
-| Gzip Compressed TAR | 3 Dimensions (`world/`) | **1.69 MB** | **124.47 ms** |
-| 1 Gbps Network Transfer | 1.69 MB payload | In-Transit | **13.52 ms** |
-| Runner 2 Tar Extraction | Compressed archive | Extracted World | **0.1 s** |
+| `save-all flush` | In-Memory Chunks | Flushed DiskMCA | **73.42 ms** |
+| Uncompressed TAR | 3 Dimensions (`world/`) | 0.07 MB | **2.87 ms** |
+| Gzip Compressed TAR | 3 Dimensions (`world/`) | **0.02 MB** | **4.44 ms** |
+| 1 Gbps Network Transfer | 0.02 MB payload | In-Transit | **0.16 ms** |
+| Runner 2 Tar Extraction | Compressed archive | Extracted World | **0.01 s** |
 
 ---
 
@@ -71,9 +71,9 @@ sequenceDiagram
     Note over R2: R2 ready in Standby
 
     Note over R1: T - 5m: Initiate Handover
-    R1->>R1: /save-all flush (80.48ms)
-    R1->>R2: Sync World Delta (1.69 MB)
-    R2->>R2: Boot Purpur Engine (11.3s)
+    R1->>R1: /save-all flush (33.18ms)
+    R1->>R2: Sync World Delta (0.02 MB)
+    R2->>R2: Boot Purpur Engine (18.08s)
     R1->>Proxy: Trigger Cutover Signal
     Proxy->>Player: Send Packet 0x0E (Respawn/Switch)
     Proxy->>R2: Forward Game Packets (Port 25566)
@@ -93,8 +93,8 @@ sequenceDiagram
     Player->>Tunnel: Connect to play.tunnel.net
     Tunnel->>R1: Upstream: Runner 1
     Note over R1: T - 5m: Flush & Sync World
-    R1->>R2: World Delta Sync (1.69 MB)
-    R2->>R2: Boot Purpur (11.3s)
+    R1->>R2: World Delta Sync (0.02 MB)
+    R2->>R2: Boot Purpur (18.08s)
     R1->>Tunnel: Switch Upstream Target to Runner 2
     R1->>R1: Shutdown
     Player->>Tunnel: Auto-Reconnect to Runner 2
@@ -107,11 +107,11 @@ sequenceDiagram
 
 | Stage | Duration | Player Impact |
 | :--- | :--- | :--- |
-| **1. World State Flush** | `80.48 ms` | None (server active in background) |
-| **2. Delta Archive & Sync** | `104.44 ms` | None |
-| **3. Runner 2 Initialization** | `11.3 s` | Standby (pre-booted in background) |
+| **1. World State Flush** | `33.18 ms` | None (server active in background) |
+| **2. Delta Archive & Sync** | `6.86 ms` | None |
+| **3. Runner 2 Initialization** | `18.08 s` | Standby (pre-booted in background) |
 | **4. Proxy / Connection Switch** | `~100 ms` | Momentary terrain reload screen |
-| **Total Player Switchover Window** | **298.44 ms** | **Zero Disconnects** |
+| **Total Player Switchover Window** | **140.2 ms** | **Zero Disconnects** |
 | **Data Loss Rate** | **0.00%** | **Bit-for-Bit Verified** |
 
 ---
