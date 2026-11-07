@@ -31,14 +31,7 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Connect runner to your Tailscale network
-      - name: Connect to Tailscale
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ github.event.inputs.tailscale_authkey || secrets.TAILSCALE_AUTHKEY }}
-          version: latest
-
-      # 2. Install BetterDisplay, CLI and Sunshine
+      # 1. Install BetterDisplay, CLI and Sunshine FIRST (using default GitHub DNS)
       - name: Install BetterDisplay & Sunshine
         run: |
           echo "=== Installing BetterDisplay & Sunshine via Homebrew ==="
@@ -46,7 +39,7 @@ jobs:
           brew install waydabber/betterdisplay/betterdisplaycli
           brew install lizardbyte/homebrew/sunshine
 
-      # 3. Launch BetterDisplay and Create Virtual Display
+      # 2. Launch BetterDisplay and Create Virtual Display
       - name: Create Virtual Screen
         run: |
           echo "=== Launching BetterDisplay & Initializing Virtual Display ==="
@@ -62,12 +55,19 @@ jobs:
           echo "Displays registered:"
           betterdisplaycli get -identifiers || true
 
-      # 4. Configure Sunshine Credentials
+      # 3. Configure Sunshine Credentials
       - name: Configure Sunshine
         run: |
           mkdir -p ~/.config/sunshine
           echo "Setting up Sunshine credentials..."
           sunshine --creds admin "${{ github.event.inputs.sunshine_password }}"
+
+      # 4. Connect runner to your Tailscale network
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ github.event.inputs.tailscale_authkey || secrets.TAILSCALE_AUTHKEY }}
+          version: latest
 
       # 5. Start Sunshine & Keep Session Active
       - name: Start Sunshine & Keep Alive
