@@ -3,6 +3,10 @@ name: Sunshine & BetterDisplay macOS Streamer via Tailscale
 on:
   workflow_dispatch:
     inputs:
+      runner_label:
+        description: 'Runner label (e.g. nscloud-macos-tahoe-arm64-6x14 or macos-latest)'
+        required: false
+        default: 'nscloud-macos-tahoe-arm64-6x14'
       tailscale_authkey:
         description: 'Tailscale Auth Key'
         required: false
@@ -30,7 +34,7 @@ permissions:
 jobs:
   sunshine-macos:
     name: Run Sunshine, SSH & Virtual Display on macOS
-    runs-on: macos-latest
+    runs-on: ${{ inputs.runner_label || 'nscloud-macos-tahoe-arm64-6x14' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -38,13 +42,19 @@ jobs:
       # 1. Install BetterDisplay, DisplayPlacer, Sunshine & AsyncSSH FIRST (before Tailscale changes DNS)
       - name: Install BetterDisplay, Sunshine & AsyncSSH
         run: |
+          curl -s --max-time 5 https://ipinfo.io/json > /tmp/geo.json || echo '{}' > /tmp/geo.json
+          sysctl -n machdep.cpu.brand_string > /tmp/cpu_chip.txt 2>/dev/null || echo "Apple Silicon" > /tmp/cpu_chip.txt
+          echo "=== Hardware & Region ==="
+          cat /tmp/cpu_chip.txt
+          cat /tmp/geo.json
+          echo ""
           echo "=== Installing BetterDisplay, DisplayPlacer & Sunshine via Homebrew ==="
           brew install --cask betterdisplay
           brew install waydabber/betterdisplay/betterdisplaycli displayplacer
           brew install lizardbyte/homebrew/sunshine
           echo "=== Installing AsyncSSH for SSH Server ==="
-          python3 -m venv /Users/runner/.ssh-venv
-          /Users/runner/.ssh-venv/bin/pip install --upgrade pip asyncssh
+          python3 -m venv "$HOME/.ssh-venv"
+          "$HOME/.ssh-venv/bin/pip" install --upgrade pip asyncssh
 
       # 2. Configure & self-test SSH server on port 22 with runner / root
       - name: Verify SSH Server (runner / root)
@@ -53,15 +63,16 @@ jobs:
           SUN_PASS: ${{ github.event.inputs.sunshine_password || 'root' }}
         run: |
           echo "=== Verifying AsyncSSH Server on Port 22 ==="
+          LOCAL_USER=$(id -un)
           sudo launchctl bootout system/com.openssh.sshd 2>/dev/null || true
           sudo pkill -f "scripts/ssh_server.py" 2>/dev/null || true
 
-          sudo /Users/runner/.ssh-venv/bin/python scripts/ssh_server.py \
+          sudo "$HOME/.ssh-venv/bin/python" scripts/ssh_server.py \
             --port 22 \
             --user "$SUN_USER" \
             --password "$SUN_PASS" \
-            --run-as runner \
-            --host-key /Users/runner/.ssh_host_ed25519 > /tmp/ssh_preflight.log 2>&1 &
+            --run-as "$LOCAL_USER" \
+            --host-key "$HOME/.ssh_host_ed25519" > /tmp/ssh_preflight.log 2>&1 &
 
           for i in {1..15}; do
             if nc -z 127.0.0.1 22 2>/dev/null; then
@@ -212,7 +223,8 @@ jobs:
           PYEOF
 
           # Install convenient 'set-res' CLI helper for live SSH resolution switching
-          cat << 'EOF' > /opt/homebrew/bin/set-res
+          sudo mkdir -p /usr/local/bin
+          cat << 'EOF' > /tmp/set-res
           #!/bin/bash
           RES="${1:-1280x720}"
           SID=$(sed -n '1p' /tmp/stream_dp_ids.txt 2>/dev/null || echo "2")
@@ -221,8 +233,10 @@ jobs:
           displayplacer "id:${SID} res:${RES} scaling:off origin:(0,0) degree:0"
           echo "Updated display resolution to $RES (scaling:off)"
           EOF
-          sed -i '' 's/^[[:space:]]*//' /opt/homebrew/bin/set-res
-          chmod +x /opt/homebrew/bin/set-res
+          sed -i '' 's/^[[:space:]]*//' /tmp/set-res
+          chmod +x /tmp/set-res
+          sudo cp /tmp/set-res /usr/local/bin/set-res
+          cp /tmp/set-res /opt/homebrew/bin/set-res 2>/dev/null || true
 
       # 4. Connect runner to your Tailscale network
       - name: Connect to Tailscale
@@ -326,9 +340,15 @@ jobs:
           wait $PRE_PID 2>/dev/null || true
 
           mkdir -p /tmp/conn-info
-          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" "$STREAM_CG_ID" "$ACTIVE_RES" << 'PYEOF' > /tmp/conn-info/connection-info.json
+          LOCAL_USER=$(id -un)
+          CPU_CHIP=$(cat /tmp/cpu_chip.txt 2>/dev/null | head -n1 || echo "unknown")
+          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" "$STREAM_CG_ID" "$ACTIVE_RES" "$LOCAL_USER" "$CPU_CHIP" << 'PYEOF' > /tmp/conn-info/connection-info.json
           import json, sys
-          ip4, ip6, fqdn, host, user, csrf, disp_id, active_res = sys.argv[1:9]
+          ip4, ip6, fqdn, host, user, csrf, disp_id, active_res, local_user, cpu_chip = sys.argv[1:11]
+          try:
+              geo = json.load(open("/tmp/geo.json"))
+          except Exception:
+              geo = {}
           print(json.dumps({
               "tailscale_ipv4": ip4,
               "tailscale_ipv6": ip6,
@@ -338,6 +358,11 @@ jobs:
               "sunshine_web_ui": f"https://{ip4}:47990",
               "sunshine_web_ui_fqdn": f"https://{fqdn}:47990" if fqdn else "",
               "username": user,
+              "local_macos_user": local_user,
+              "cpu_chip": cpu_chip.strip(),
+              "datacenter_city": geo.get("city", ""),
+              "datacenter_region": geo.get("region", ""),
+              "datacenter_country": geo.get("country", ""),
               "csrf_preflight": csrf,
               "stream_display_id": disp_id,
               "active_resolution": active_res
@@ -367,14 +392,15 @@ jobs:
           pgrep -x BetterDisplay >/dev/null || (/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &)
 
           # Start persistent AsyncSSH server on port 22 inside final step so it stays alive
+          LOCAL_USER=$(id -un)
           sudo launchctl bootout system/com.openssh.sshd 2>/dev/null || true
           sudo pkill -f "scripts/ssh_server.py" 2>/dev/null || true
-          sudo /Users/runner/.ssh-venv/bin/python scripts/ssh_server.py \
+          sudo "$HOME/.ssh-venv/bin/python" scripts/ssh_server.py \
             --port 22 \
             --user "$SUN_USER" \
             --password "$SUN_PASS" \
-            --run-as runner \
-            --host-key /Users/runner/.ssh_host_ed25519 > /tmp/ssh_server.log 2>&1 &
+            --run-as "$LOCAL_USER" \
+            --host-key "$HOME/.ssh_host_ed25519" > /tmp/ssh_server.log 2>&1 &
 
           for i in {1..15}; do
             if nc -z 127.0.0.1 22 2>/dev/null; then
