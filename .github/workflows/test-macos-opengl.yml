@@ -1,0 +1,101 @@
+name: Test macOS Runners OpenGL & GPU
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/test-macos-opengl.yml'
+
+jobs:
+  test-opengl:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15, macos-13]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: System Hardware & Display Info
+        run: |
+          echo "=== OS Version ==="
+          sw_vers
+          echo "=== CPU & Model ==="
+          sysctl -n machdep.cpu.brand_string || uname -m
+          system_profiler SPHardwareDataType | grep -E "Model|Chip|Processor|Cores|Memory" || true
+          echo "=== Graphics / Displays ==="
+          system_profiler SPDisplaysDataType || true
+
+      - name: Test Metal GPU Devices
+        run: |
+          cat << 'EOF' > test_metal.swift
+          import Metal
+          let devices = MTLCopyAllDevices()
+          print("Metal Devices Count: \(devices.count)")
+          for (i, dev) in devices.enumerated() {
+              print("Device \(i): \(dev.name)")
+              print("  Low Power: \(dev.isLowPower)")
+              print("  Headless: \(dev.isHeadless)")
+              print("  Removable: \(dev.isRemovable)")
+          }
+          EOF
+          swift test_metal.swift
+
+      - name: Compile and Run OpenGL Test
+        run: |
+          cat << 'EOF' > test_gl.m
+          #import <AppKit/AppKit.h>
+          #import <OpenGL/OpenGL.h>
+          #import <OpenGL/gl3.h>
+          #include <stdio.h>
+
+          int main() {
+              @autoreleasepool {
+                  printf("==============================================\n");
+                  printf("TEST 1: Hardware-Accelerated OpenGL 4.1 (NSOpenGLPFAAccelerated)\n");
+                  printf("==============================================\n");
+                  NSOpenGLPixelFormatAttribute accelAttrs[] = {
+                      NSOpenGLPFAAccelerated,
+                      NSOpenGLPFAOpenGLProfile,
+                      NSOpenGLProfileVersion4_1Core,
+                      0
+                  };
+                  NSOpenGLPixelFormat *accelFmt = [[NSOpenGLPixelFormat alloc] initWithAttributes:accelAttrs];
+                  if (accelFmt) {
+                      printf(">> ACCELERATED_OPENGL: SUPPORTED (YES)\n");
+                      NSOpenGLContext *ctx = [[NSOpenGLContext alloc] initWithFormat:accelFmt shareContext:nil];
+                      if (ctx) {
+                          [ctx makeCurrentContext];
+                          printf("   GL_RENDERER: %s\n", glGetString(GL_RENDERER));
+                          printf("   GL_VERSION:  %s\n", glGetString(GL_VERSION));
+                          printf("   GL_VENDOR:   %s\n", glGetString(GL_VENDOR));
+                      }
+                  } else {
+                      printf(">> ACCELERATED_OPENGL: NOT SUPPORTED (NO - NSOpenGLPFAAccelerated returned nil)\n");
+                  }
+
+                  printf("\n==============================================\n");
+                  printf("TEST 2: Legacy / Unaccelerated OpenGL (Apple Software Renderer)\n");
+                  printf("==============================================\n");
+                  NSOpenGLPixelFormatAttribute softAttrs[] = {
+                      NSOpenGLPFAOpenGLProfile,
+                      NSOpenGLProfileVersion4_1Core,
+                      0
+                  };
+                  NSOpenGLPixelFormat *softFmt = [[NSOpenGLPixelFormat alloc] initWithAttributes:softAttrs];
+                  if (softFmt) {
+                      printf(">> SOFTWARE_OPENGL: SUPPORTED (YES)\n");
+                      NSOpenGLContext *ctx = [[NSOpenGLContext alloc] initWithFormat:softFmt shareContext:nil];
+                      if (ctx) {
+                          [ctx makeCurrentContext];
+                          printf("   GL_RENDERER: %s\n", glGetString(GL_RENDERER));
+                          printf("   GL_VERSION:  %s\n", glGetString(GL_VERSION));
+                      }
+                  } else {
+                      printf(">> SOFTWARE_OPENGL: NOT SUPPORTED (NO)\n");
+                  }
+                  printf("==============================================\n");
+              }
+              return 0;
+          }
+          EOF
+          clang -framework AppKit -framework OpenGL -Wno-deprecated -o test_gl test_gl.m
+          ./test_gl
