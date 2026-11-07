@@ -220,6 +220,7 @@ def make_process_handler(shell_path: str, base_env: dict):
 
 async def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--host", type=str, default="")
     parser.add_argument("--port", type=int, default=22)
     parser.add_argument("--user", type=str, default="runner")
     parser.add_argument("--password", type=str, default="root")
@@ -248,16 +249,20 @@ async def main() -> None:
         "LANG": "en_US.UTF-8",
     }
 
-    server = await asyncssh.create_server(
-        lambda: SimpleAuthSSHServer(args.user, args.password),
-        host="",
-        port=args.port,
-        server_host_keys=[args.host_key],
-        process_factory=make_process_handler(shell_path, base_env),
-        encoding=None,
-        sftp_factory=True,
-        allow_scp=True,
-    )
+    hosts = [h.strip() for h in args.host.split(",") if h.strip()] if args.host else [""]
+    servers = []
+    for bind_host in hosts:
+        srv = await asyncssh.create_server(
+            lambda: SimpleAuthSSHServer(args.user, args.password),
+            host=bind_host,
+            port=args.port,
+            server_host_keys=[args.host_key],
+            process_factory=make_process_handler(shell_path, base_env),
+            encoding=None,
+            sftp_factory=True,
+            allow_scp=True,
+        )
+        servers.append(srv)
 
     if os.geteuid() == 0 and pw_entry.pw_uid != 0:
         os.chown(args.host_key, pw_entry.pw_uid, pw_entry.pw_gid)
@@ -267,8 +272,8 @@ async def main() -> None:
         os.environ["HOME"] = pw_entry.pw_dir
         os.environ["USER"] = pw_entry.pw_name
 
-    print(f"AsyncSSH server listening on port {args.port} (auth user='{args.user}', shell={shell_path})", flush=True)
-    await server.wait_closed()
+    print(f"AsyncSSH server listening on {hosts}:{args.port} (auth user='{args.user}', shell={shell_path})", flush=True)
+    await asyncio.gather(*(s.wait_closed() for s in servers))
 
 
 if __name__ == "__main__":

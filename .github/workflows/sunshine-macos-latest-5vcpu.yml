@@ -1,0 +1,602 @@
+name: Sunshine macOS-latest (5 vCPU / 14 GB Spec Gate)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tailscale_authkey:
+        description: 'Tailscale Auth Key (falls back to TAILSCALE_AUTHKEY secret if empty)'
+        required: false
+        default: ''
+      display_width:
+        description: 'Virtual Display Width'
+        required: false
+        default: '1280'
+      display_height:
+        description: 'Virtual Display Height'
+        required: false
+        default: '720'
+      sunshine_user:
+        description: 'SSH & Sunshine Admin Username'
+        required: false
+        default: 'runner'
+      sunshine_password:
+        description: 'SSH & Sunshine Admin Password'
+        required: false
+        default: 'root'
+      min_vcpu:
+        description: 'Minimum vCPU required to proceed (ends immediately on 3 vCPU)'
+        required: false
+        default: '5'
+      min_ram_gb:
+        description: 'Minimum RAM in GB required to proceed (ends immediately on 7 GB)'
+        required: false
+        default: '14'
+      auto_reroll:
+        description: 'Automatically re-run workflow (up to 5x) if 3 vCPU / 7 GB runner is allocated'
+        required: false
+        type: boolean
+        default: false
+      reroll_attempt:
+        description: 'Internal reroll counter'
+        required: false
+        default: '1'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  sunshine-macos-latest:
+    name: macOS-latest Spec Check & Sunshine Streamer
+    runs-on: macos-latest
+    steps:
+      # 0. Check hardware specs FIRST (<1s) before checkout or installs:
+      #    - 3 vCPU / 7 GB RAM  -> end immediately
+      #    - 5 vCPU / 14 GB RAM -> proceed
+      - name: Check Runner Hardware Specs
+        id: specs
+        env:
+          MIN_VCPU: ${{ inputs.min_vcpu || '5' }}
+          MIN_RAM_GB: ${{ inputs.min_ram_gb || '14' }}
+          AUTO_REROLL: ${{ inputs.auto_reroll || false }}
+          ATTEMPT: ${{ inputs.reroll_attempt || '1' }}
+          GH_TOKEN: ${{ github.token }}
+          IN_TS_KEY: ${{ inputs.tailscale_authkey }}
+          IN_W: ${{ inputs.display_width || '1280' }}
+          IN_H: ${{ inputs.display_height || '720' }}
+          IN_USER: ${{ inputs.sunshine_user || 'runner' }}
+          IN_PASS: ${{ inputs.sunshine_password || 'root' }}
+        run: |
+          VCPU=$(sysctl -n hw.ncpu)
+          MEM_BYTES=$(sysctl -n hw.memsize)
+          RAM_GB=$(python3 -c "print(round(${MEM_BYTES} / (1024**3)))")
+          CHIP=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Apple Silicon")
+          MACOS_VER=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
+
+          echo "$CHIP" > /tmp/cpu_chip.txt
+          echo "$VCPU" > /tmp/vcpu_count.txt
+          echo "$RAM_GB" > /tmp/ram_gb.txt
+
+          echo "=========================================================="
+          echo "🔍 GITHUB MACOS-LATEST HARDWARE SPEC CHECK"
+          echo "=========================================================="
+          echo "CPU Chip:     $CHIP"
+          echo "macOS:        $MACOS_VER"
+          echo "Detected:     ${VCPU} vCPU / ${RAM_GB} GB RAM (${MEM_BYTES} bytes)"
+          echo "Required:     >= ${MIN_VCPU} vCPU / >= ${MIN_RAM_GB} GB RAM"
+          echo "Attempt:      #${ATTEMPT}"
+          echo "=========================================================="
+
+          echo "vcpu=${VCPU}" >> "$GITHUB_OUTPUT"
+          echo "ram_gb=${RAM_GB}" >> "$GITHUB_OUTPUT"
+
+          if [ "$VCPU" -lt "$MIN_VCPU" ] || [ "$RAM_GB" -lt "$MIN_RAM_GB" ]; then
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "🛑 Rolled low-spec runner (${VCPU} vCPU / ${RAM_GB} GB RAM). Ending job immediately to avoid lag!"
+
+            {
+              echo "### ❌ Low-Spec Runner Skipped (${VCPU} vCPU / ${RAM_GB} GB RAM)"
+              echo "| Metric | Detected | Required |"
+              echo "| :--- | :--- | :--- |"
+              echo "| **CPU** | \`${VCPU} vCPU\` (${CHIP}) | \`>= ${MIN_VCPU} vCPU\` |"
+              echo "| **RAM** | \`${RAM_GB} GB\` | \`>= ${MIN_RAM_GB} GB\` |"
+              echo ""
+              echo "Ended immediately without running setup because the 3 vCPU / 7 GB runner lags."
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            if [ "$AUTO_REROLL" = "true" ] && [ "$ATTEMPT" -lt 6 ]; then
+              NEXT=$((ATTEMPT + 1))
+              echo "🔄 Auto-reroll enabled — dispatching attempt #${NEXT}..."
+              python3 - << 'PYEOF'
+          import json, os, urllib.request
+          repo = os.environ["GITHUB_REPOSITORY"]
+          ref = os.environ["GITHUB_REF_NAME"]
+          token = os.environ["GH_TOKEN"]
+          next_attempt = str(int(os.environ.get("ATTEMPT", "1")) + 1)
+          payload = {
+              "ref": ref,
+              "inputs": {
+                  "tailscale_authkey": os.environ.get("IN_TS_KEY", ""),
+                  "display_width": os.environ.get("IN_W", "1280"),
+                  "display_height": os.environ.get("IN_H", "720"),
+                  "sunshine_user": os.environ.get("IN_USER", "runner"),
+                  "sunshine_password": os.environ.get("IN_PASS", "root"),
+                  "min_vcpu": os.environ.get("MIN_VCPU", "5"),
+                  "min_ram_gb": os.environ.get("MIN_RAM_GB", "14"),
+                  "auto_reroll": True,
+                  "reroll_attempt": next_attempt,
+              },
+          }
+          req = urllib.request.Request(
+              f"https://api.github.com/repos/{repo}/actions/workflows/sunshine-macos-latest-5vcpu.yml/dispatches",
+              data=json.dumps(payload).encode(),
+              method="POST",
+              headers={
+                  "Authorization": f"Bearer {token}",
+                  "Accept": "application/vnd.github+json",
+                  "Content-Type": "application/json",
+              },
+          )
+          urllib.request.urlopen(req).read()
+          print(f"✅ Triggered auto-reroll attempt #{next_attempt}")
+          PYEOF
+            fi
+            exit 0
+          fi
+
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+          echo "✅ High-spec runner confirmed (${VCPU} vCPU / ${RAM_GB} GB RAM)! Proceeding with setup..."
+          {
+            echo "### ✅ High-Spec Runner Confirmed (${VCPU} vCPU / ${RAM_GB} GB RAM)"
+            echo "| Metric | Detected | Required |"
+            echo "| :--- | :--- | :--- |"
+            echo "| **CPU** | \`${VCPU} vCPU\` (${CHIP}) | \`>= ${MIN_VCPU} vCPU\` |"
+            echo "| **RAM** | \`${RAM_GB} GB\` | \`>= ${MIN_RAM_GB} GB\` |"
+            echo ""
+            echo "Proceeding with BetterDisplay, Tailscale, SSH, and Sunshine (with 48kHz ScreenCaptureKit audio)!"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout Code
+        if: steps.specs.outputs.proceed == 'true'
+        uses: actions/checkout@v4
+
+      # 1. Install BetterDisplay, DisplayPlacer, Sunshine (+ SCK 48kHz Audio Fix) & AsyncSSH FIRST
+      - name: Install BetterDisplay, Sunshine & AsyncSSH
+        if: steps.specs.outputs.proceed == 'true'
+        run: |
+          curl -s --max-time 5 https://ipinfo.io/json > /tmp/geo.json || echo '{}' > /tmp/geo.json
+          echo "=== Datacenter Geo ==="
+          cat /tmp/geo.json
+          echo ""
+
+          echo "=== Installing BetterDisplay, DisplayPlacer & Sunshine via Homebrew ==="
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          brew update --quiet
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          brew install --cask betterdisplay
+          rm -f /opt/homebrew/bin/betterdisplaycli
+          brew install waydabber/betterdisplay/betterdisplaycli displayplacer
+          brew link --overwrite betterdisplaycli || true
+          brew install lizardbyte/homebrew/sunshine
+
+          echo "=== Applying ScreenCaptureKit 48kHz Stereo Audio Patch to Sunshine ==="
+          SUN_BIN="$(brew --prefix sunshine)/bin/sunshine"
+          REAL_SUN="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$SUN_BIN")"
+          cp -a "$REAL_SUN" "${REAL_SUN}.stock"
+          if curl -fsSL --max-time 30 \
+            "https://github.com/polly67/workflow-benchs/releases/download/v1.0-moonlight-wasd/sunshine-macos-arm64-sck-audio.tar.gz" \
+            -o /tmp/sunshine-sck.tar.gz; then
+            tar -xzf /tmp/sunshine-sck.tar.gz -C /tmp
+            chmod +x /tmp/sunshine
+            codesign --force --sign - /tmp/sunshine 2>/dev/null || true
+            cp -f /tmp/sunshine "$REAL_SUN"
+            if sunshine --version >/dev/null 2>&1; then
+              echo "✅ Installed ScreenCaptureKit 48kHz stereo audio-fixed Sunshine binary!"
+            else
+              echo "⚠️ Dynamic library mismatch on patched binary — keeping stock Homebrew Sunshine"
+              cp -f "${REAL_SUN}.stock" "$REAL_SUN"
+            fi
+            rm -f /tmp/sunshine /tmp/sunshine-sck.tar.gz
+          fi
+
+          echo "=== Installing AsyncSSH for SSH Server ==="
+          python3 -m venv "$HOME/.ssh-venv"
+          "$HOME/.ssh-venv/bin/pip" install --upgrade pip asyncssh
+
+      # 2. Configure & self-test SSH server on port 22 with runner / root
+      - name: Verify SSH Server (runner / root)
+        if: steps.specs.outputs.proceed == 'true'
+        env:
+          SUN_USER: ${{ inputs.sunshine_user || 'runner' }}
+          SUN_PASS: ${{ inputs.sunshine_password || 'root' }}
+        run: |
+          echo "=== Verifying AsyncSSH Server on Port 22 ==="
+          LOCAL_USER=$(id -un)
+          sudo launchctl bootout system/com.openssh.sshd 2>/dev/null || true
+          sudo pkill -f "scripts/ssh_server.py" 2>/dev/null || true
+
+          sudo "$HOME/.ssh-venv/bin/python" scripts/ssh_server.py \
+            --port 22 \
+            --user "$SUN_USER" \
+            --password "$SUN_PASS" \
+            --run-as "$LOCAL_USER" \
+            --host-key "$HOME/.ssh_host_ed25519" > /tmp/ssh_preflight.log 2>&1 &
+
+          for i in {1..15}; do
+            if nc -z 127.0.0.1 22 2>/dev/null; then
+              break
+            fi
+            sleep 0.5
+          done
+
+          cat /tmp/ssh_preflight.log || true
+
+          python3 - "$SUN_USER" "$SUN_PASS" << 'PYEOF'
+          import os, pty, select, sys, time
+          user, pw = sys.argv[1], sys.argv[2]
+          pid, fd = pty.fork()
+          if pid == 0:
+              os.execvp("ssh", [
+                  "ssh",
+                  "-o", "StrictHostKeyChecking=no",
+                  "-o", "UserKnownHostsFile=/dev/null",
+                  "-o", "PreferredAuthentications=password,keyboard-interactive",
+                  "-o", "PubkeyAuthentication=no",
+                  f"{user}@127.0.0.1",
+                  "id -un && echo SSH_LOGIN_OK"
+              ])
+          buf = b""
+          sent = False
+          deadline = time.time() + 15
+          while time.time() < deadline:
+              r, _, _ = select.select([fd], [], [], 0.5)
+              if r:
+                  try:
+                      chunk = os.read(fd, 4096)
+                  except OSError:
+                      break
+                  if not chunk:
+                      break
+                  buf += chunk
+                  if (b"assword:" in buf or b"Password:" in buf) and not sent:
+                      os.write(fd, (pw + "\n").encode())
+                      sent = True
+                  if b"SSH_LOGIN_OK" in buf:
+                      print("✅ Verified live SSH login:", buf.decode(errors="replace").strip())
+                      sys.exit(0)
+          print("❌ SSH login verification failed. Output:", buf.decode(errors="replace"))
+          sys.exit(1)
+          PYEOF
+
+          sudo pkill -f "scripts/ssh_server.py" 2>/dev/null || true
+          sleep 1
+
+      # 3. Strip macOS Compositor Overhead & Create 1:1 Non-HiDPI Virtual Display
+      - name: Optimize macOS & Create Virtual Screen
+        if: steps.specs.outputs.proceed == 'true'
+        env:
+          DISP_W: ${{ inputs.display_width || '1280' }}
+          DISP_H: ${{ inputs.display_height || '720' }}
+        run: |
+          echo "=== Disabling macOS Window Animations, Transparency & Background Indexing ==="
+          defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false || true
+          defaults write NSGlobalDomain NSWindowResizeTime -float 0.001 || true
+          defaults write com.apple.universalaccess reduceTransparency -bool true || true
+          defaults write com.apple.universalaccess reduceMotion -bool true || true
+          defaults write com.apple.dock expose-animation-duration -float 0.05 || true
+          defaults write com.apple.dock launchanim -bool false || true
+          defaults write com.apple.dock autohide-time-modifier -float 0.05 || true
+          sudo mdutil -a -i off 2>/dev/null || true
+          sudo softwareupdate --schedule off 2>/dev/null || true
+          killall Dock 2>/dev/null || true
+
+          echo "=== Launching BetterDisplay & Creating Non-HiDPI Virtual Display ==="
+          /Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &
+          sleep 5
+
+          betterdisplaycli create -deviceType=virtualScreen -virtualScreenName="StreamDisplay" -aspectWidth=16 -aspectHeight=9 -virtualScreenHiDPI=off || true
+          sleep 3
+          betterdisplaycli set -name="StreamDisplay" -connected=on || true
+          betterdisplaycli set -name="StreamDisplay" -virtualScreenHiDPI=off || true
+          sleep 2
+
+          echo "=== Configuring 1:1 Non-HiDPI Resolution (${DISP_W}x${DISP_H}) & Mirroring via displayplacer ==="
+          python3 - "$DISP_W" "$DISP_H" << 'PYEOF'
+          import ctypes, json, re, subprocess, sys
+
+          target_w, target_h = sys.argv[1], sys.argv[2]
+          stream_cg_id = "2"
+          apple_cg_id = "1"
+          try:
+              raw_ident = subprocess.check_output(["betterdisplaycli", "get", "-identifiers"], text=True, stderr=subprocess.DEVNULL)
+              items = json.loads("[" + raw_ident.strip().strip(",") + "]")
+              for it in items:
+                  if it.get("name") == "StreamDisplay" and it.get("displayID"):
+                      stream_cg_id = str(it["displayID"])
+                  elif "Apple Virtual" in it.get("name", "") and it.get("displayID"):
+                      apple_cg_id = str(it["displayID"])
+          except Exception as e:
+              print("Warning parsing betterdisplaycli identifiers:", e)
+
+          with open("/tmp/stream_display_id.txt", "w") as f:
+              f.write(stream_cg_id)
+
+          dp_out = subprocess.run(["displayplacer", "list"], capture_output=True, text=True).stdout
+          print(dp_out)
+
+          blocks = dp_out.split("Persistent screen id:")
+          ctx_to_pers = {}
+          for b in blocks[1:]:
+              lines = b.strip().splitlines()
+              pers_id = lines[0].strip()
+              m = re.search(r"Contextual screen id:\s*(\d+)", b)
+              if m:
+                  ctx_to_pers[m.group(1)] = pers_id
+
+          s_id = ctx_to_pers.get(stream_cg_id, stream_cg_id)
+          a_id = ctx_to_pers.get(apple_cg_id, apple_cg_id)
+          with open("/tmp/stream_dp_ids.txt", "w") as f:
+              f.write(f"{s_id}\n{a_id}\n")
+
+          cmds = [
+              ["displayplacer", f"id:{s_id}+{a_id} res:{target_w}x{target_h} scaling:off origin:(0,0) degree:0"],
+              ["displayplacer", f"id:{s_id} res:{target_w}x{target_h} scaling:off origin:(0,0) degree:0"],
+              ["displayplacer", f"id:{s_id} res:{target_w}x{target_h} origin:(0,0) degree:0"],
+          ]
+          for cmd in cmds:
+              print("Running:", " ".join(cmd))
+              r = subprocess.run(cmd, capture_output=True, text=True)
+              print(r.stdout, r.stderr)
+              if r.returncode == 0:
+                  break
+
+          try:
+              cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+              cg.CGDisplayPixelsWide.argtypes = [ctypes.c_uint32]
+              cg.CGDisplayPixelsWide.restype = ctypes.c_size_t
+              cg.CGDisplayPixelsHigh.argtypes = [ctypes.c_uint32]
+              cg.CGDisplayPixelsHigh.restype = ctypes.c_size_t
+              did = int(stream_cg_id)
+              pw = cg.CGDisplayPixelsWide(did)
+              ph = cg.CGDisplayPixelsHigh(did)
+              actual = f"{pw}x{ph}"
+          except Exception as e:
+              actual = f"error:{e}"
+          print(f"✅ Verified StreamDisplay (CGDirectDisplayID={stream_cg_id}) actual framebuffer: {actual}")
+          with open("/tmp/active_resolution.txt", "w") as f:
+              f.write(actual)
+          PYEOF
+
+          sudo mkdir -p /usr/local/bin
+          cat << 'EOF' > /tmp/set-res
+          #!/bin/bash
+          RES="${1:-1280x720}"
+          SID=$(sed -n '1p' /tmp/stream_dp_ids.txt 2>/dev/null || echo "2")
+          AID=$(sed -n '2p' /tmp/stream_dp_ids.txt 2>/dev/null || echo "1")
+          displayplacer "id:${SID}+${AID} res:${RES} scaling:off origin:(0,0) degree:0" || \
+          displayplacer "id:${SID} res:${RES} scaling:off origin:(0,0) degree:0"
+          echo "Updated display resolution to $RES (scaling:off)"
+          EOF
+          sed -i '' 's/^[[:space:]]*//' /tmp/set-res
+          chmod +x /tmp/set-res
+          sudo cp /tmp/set-res /usr/local/bin/set-res
+          cp /tmp/set-res /opt/homebrew/bin/set-res 2>/dev/null || true
+
+      # 4. Connect runner to your Tailscale network
+      - name: Connect to Tailscale
+        if: steps.specs.outputs.proceed == 'true'
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ inputs.tailscale_authkey || secrets.TAILSCALE_AUTHKEY }}
+          version: latest
+
+      # 5. Configure Sunshine (runner / root + CSRF allowed origins) & Preflight Test
+      - name: Configure Sunshine & Verify CSRF
+        if: steps.specs.outputs.proceed == 'true'
+        env:
+          SUN_USER: ${{ inputs.sunshine_user || 'runner' }}
+          SUN_PASS: ${{ inputs.sunshine_password || 'root' }}
+        run: |
+          # Restore public DNS resolvers alongside Tailscale MagicDNS so Safari, brew, curl & artifact upload work
+          sudo tailscale set --accept-dns=false 2>/dev/null || true
+          networksetup -listallnetworkservices | tail -n +2 | sed 's/^\*//' | while IFS= read -r svc; do
+            if [ -n "$svc" ]; then
+              sudo networksetup -setdnsservers "$svc" 1.1.1.1 8.8.8.8 100.100.100.100 2>/dev/null || true
+            fi
+          done
+          sudo dscacheutil -flushcache 2>/dev/null || true
+          sudo killall -HUP mDNSResponder 2>/dev/null || true
+
+          mkdir -p ~/.config/sunshine
+
+          TS_IP=$(tailscale ip -4 | head -n1 | tr -d '[:space:]')
+          TS_IPV6=$(tailscale ip -6 2>/dev/null | head -n1 | tr -d '[:space:]' || true)
+          TS_JSON=$(tailscale status --json)
+          TS_FQDN=$(python3 -c 'import sys,json; d=json.loads(sys.argv[1]); print(d.get("Self",{}).get("DNSName","").rstrip("."))' "$TS_JSON")
+          TS_HOST=$(python3 -c 'import sys,json; d=json.loads(sys.argv[1]); print(d.get("Self",{}).get("HostName",""))' "$TS_JSON")
+
+          ORIGINS=$(python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" << 'PYEOF'
+          import sys
+          ip4, ip6, fqdn, host = sys.argv[1:5]
+          hosts = []
+          for h in [ip4, f"[{ip6}]" if ip6 else "", fqdn, fqdn.lower(), host, host.lower(), "localhost", "127.0.0.1"]:
+              if h and h not in hosts:
+                  hosts.append(h)
+          origins = []
+          for h in hosts:
+              origins.append(f"https://{h}:47990")
+              origins.append(f"https://{h}")
+          print(",".join(origins))
+          PYEOF
+          )
+
+          STREAM_CG_ID=$(cat /tmp/stream_display_id.txt 2>/dev/null || echo "2")
+          ACTIVE_RES=$(cat /tmp/active_resolution.txt 2>/dev/null || echo "unknown")
+
+          cat << EOF > ~/.config/sunshine/sunshine.conf
+          sunshine_name = macOS-5vCPU-Runner
+          address_family = both
+          origin_web_ui_allowed = wan
+          csrf_allowed_origins = $ORIGINS
+          output_name = $STREAM_CG_ID
+          encoder = videotoolbox
+          vt_coder = cavlc
+          vt_realtime = enabled
+          vt_software = disabled
+          fec_percentage = 5
+          qp = 26
+          min_threads = 2
+          EOF
+          sed -i '' 's/^[[:space:]]*//' ~/.config/sunshine/sunshine.conf
+
+          sunshine ~/.config/sunshine/sunshine.conf --creds "$SUN_USER" "$SUN_PASS"
+
+          sunshine ~/.config/sunshine/sunshine.conf > /tmp/sunshine-preflight.log 2>&1 &
+          PRE_PID=$!
+          CSRF_STATUS="untested"
+          for i in {1..15}; do
+            sleep 1
+            HTTP_CODE=$(curl -k -s -o /tmp/pin_resp.txt -w "%{http_code}" \
+              -u "${SUN_USER}:${SUN_PASS}" \
+              -X POST \
+              -H "Origin: https://${TS_IP}:47990" \
+              -H "Content-Type: application/json" \
+              -d '{"pin":"0000","name":"preflight","pairing_id":"00000000000000000000000000000000"}' \
+              "https://${TS_IP}:47990/api/pin" || true)
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "400" ]; then
+              RESP_BODY=$(cat /tmp/pin_resp.txt 2>/dev/null || true)
+              if echo "$RESP_BODY" | grep -qi "csrf"; then
+                CSRF_STATUS="blocked_csrf_${HTTP_CODE}"
+              else
+                CSRF_STATUS="passed_${HTTP_CODE}"
+                echo "✅ Sunshine Web UI auth & CSRF check PASSED (HTTP $HTTP_CODE)!"
+                break
+              fi
+            fi
+          done
+
+          for i in {1..8}; do
+            if grep -qE "No screen capture permission|Found H\.264 encoder|Screencapture failed" /tmp/sunshine-preflight.log 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          kill $PRE_PID 2>/dev/null || true
+          wait $PRE_PID 2>/dev/null || true
+
+          CAPTURE_STATUS="unknown"
+          if grep -qi "No screen capture permission" /tmp/sunshine-preflight.log 2>/dev/null; then
+            CAPTURE_STATUS="needs_vnc_approval"
+          elif grep -qi "Found H.264 encoder" /tmp/sunshine-preflight.log 2>/dev/null; then
+            CAPTURE_STATUS="granted_natively"
+          fi
+
+          mkdir -p /tmp/conn-info
+          cp /tmp/sunshine-preflight.log /tmp/conn-info/sunshine-preflight.log 2>/dev/null || true
+          LOCAL_USER=$(id -un)
+          CPU_CHIP=$(cat /tmp/cpu_chip.txt 2>/dev/null | head -n1 || echo "unknown")
+          VCPU_CNT=$(cat /tmp/vcpu_count.txt 2>/dev/null | head -n1 || echo "5")
+          RAM_CNT=$(cat /tmp/ram_gb.txt 2>/dev/null | head -n1 || echo "14")
+          MACOS_VER=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
+
+          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" "$STREAM_CG_ID" "$ACTIVE_RES" "$LOCAL_USER" "$CPU_CHIP" "$MACOS_VER" "$CAPTURE_STATUS" "$VCPU_CNT" "$RAM_CNT" << 'PYEOF' > /tmp/conn-info/connection-info.json
+          import json, sys
+          ip4, ip6, fqdn, host, user, csrf, disp_id, active_res, local_user, cpu_chip, macos_ver, cap_status, vcpu, ram_gb = sys.argv[1:15]
+          try:
+              geo = json.load(open("/tmp/geo.json"))
+          except Exception:
+              geo = {}
+          print(json.dumps({
+              "vcpu": int(vcpu),
+              "ram_gb": int(ram_gb),
+              "tailscale_ipv4": ip4,
+              "tailscale_ipv6": ip6,
+              "tailscale_fqdn": fqdn,
+              "tailscale_hostname": host,
+              "ssh_command": f"ssh {user}@{ip4}",
+              "vnc_fallback": f"vnc://{ip4}:5900",
+              "sunshine_web_ui": f"https://{ip4}:47990",
+              "sunshine_web_ui_fqdn": f"https://{fqdn}:47990" if fqdn else "",
+              "username": user,
+              "local_macos_user": local_user,
+              "macos_version": macos_ver.strip(),
+              "cpu_chip": cpu_chip.strip(),
+              "datacenter_city": geo.get("city", ""),
+              "datacenter_region": geo.get("region", ""),
+              "datacenter_country": geo.get("country", ""),
+              "csrf_preflight": csrf,
+              "screen_capture_status": cap_status,
+              "stream_display_id": disp_id,
+              "active_resolution": active_res
+          }, indent=2))
+          PYEOF
+          cat /tmp/conn-info/connection-info.json
+
+      # 6. Publish connection info immediately so it is accessible while Sunshine runs
+      - name: Upload Connection Info
+        if: steps.specs.outputs.proceed == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: sunshine-connection-info
+          path: /tmp/conn-info/
+          retention-days: 1
+
+      # 7. Start SSH, Sunshine & Keep Session Active
+      - name: Start SSH, Sunshine & Keep Alive
+        if: steps.specs.outputs.proceed == 'true'
+        env:
+          SUN_USER: ${{ inputs.sunshine_user || 'runner' }}
+          SUN_PASS: ${{ inputs.sunshine_password || 'root' }}
+        run: |
+          caffeinate -d -i -m -s -u &
+
+          pgrep -x BetterDisplay >/dev/null || (/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &)
+
+          # If GitHub-hosted macos-latest requires 1-time Screen Recording approval, enable macOS VNC on :5900 over Tailscale
+          if grep -qi "No screen capture permission" /tmp/sunshine-preflight.log 2>/dev/null; then
+            sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+              -activate -configure -access -on \
+              -clientopts -setvnclegacy -vnclegacy yes \
+              -clientopts -setvncpw -vncpw "$SUN_PASS" \
+              -restart -agent -privs -all 2>/dev/null || true
+            open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture" 2>/dev/null || true
+          fi
+
+          LOCAL_USER=$(id -un)
+          sudo launchctl bootout system/com.openssh.sshd 2>/dev/null || true
+          sudo pkill -f "scripts/ssh_server.py" 2>/dev/null || true
+          sudo "$HOME/.ssh-venv/bin/python" scripts/ssh_server.py \
+            --port 22 \
+            --user "$SUN_USER" \
+            --password "$SUN_PASS" \
+            --run-as "$LOCAL_USER" \
+            --host-key "$HOME/.ssh_host_ed25519" > /tmp/ssh_server.log 2>&1 &
+
+          for i in {1..15}; do
+            if nc -z 127.0.0.1 22 2>/dev/null; then
+              echo "✅ Persistent SSH server listening on port 22"
+              break
+            fi
+            sleep 0.5
+          done
+
+          TS_IP=$(tailscale ip -4 | head -n1 | tr -d '[:space:]')
+          VCPU_CNT=$(cat /tmp/vcpu_count.txt 2>/dev/null || echo "5")
+          RAM_CNT=$(cat /tmp/ram_gb.txt 2>/dev/null || echo "14")
+          echo "=========================================================="
+          echo "🎉 SUNSHINE & SSH ARE LIVE ON MACOS (${VCPU_CNT} vCPU / ${RAM_CNT} GB RAM)!"
+          echo "=========================================================="
+          echo "Tailscale IP:       $TS_IP"
+          echo "SSH Access:         ssh ${SUN_USER}@${TS_IP}  (password: ${SUN_PASS})"
+          echo "Sunshine Web UI:    https://${TS_IP}:47990"
+          echo "VNC (if prompted):  vnc://${TS_IP}:5900  (password: ${SUN_PASS})"
+          echo "Username:           ${SUN_USER}"
+          echo "Password:           ${SUN_PASS}"
+          echo "=========================================================="
+
+          while true; do
+            sunshine ~/.config/sunshine/sunshine.conf || true
+            echo "Sunshine exited — restarting in 2 seconds..."
+            sleep 2
+          done
