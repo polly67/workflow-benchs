@@ -10,11 +10,11 @@ on:
       display_width:
         description: 'Virtual Display Width'
         required: false
-        default: '1920'
+        default: '1280'
       display_height:
         description: 'Virtual Display Height'
         required: false
-        default: '1080'
+        default: '720'
       sunshine_user:
         description: 'SSH & Sunshine Admin Username'
         required: false
@@ -35,12 +35,12 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # 1. Install BetterDisplay, Sunshine & AsyncSSH FIRST (before Tailscale changes DNS)
+      # 1. Install BetterDisplay, DisplayPlacer, Sunshine & AsyncSSH FIRST (before Tailscale changes DNS)
       - name: Install BetterDisplay, Sunshine & AsyncSSH
         run: |
-          echo "=== Installing BetterDisplay & Sunshine via Homebrew ==="
+          echo "=== Installing BetterDisplay, DisplayPlacer & Sunshine via Homebrew ==="
           brew install --cask betterdisplay
-          brew install waydabber/betterdisplay/betterdisplaycli
+          brew install waydabber/betterdisplay/betterdisplaycli displayplacer
           brew install lizardbyte/homebrew/sunshine
           echo "=== Installing AsyncSSH for SSH Server ==="
           python3 -m venv /Users/runner/.ssh-venv
@@ -113,26 +113,116 @@ jobs:
           sudo pkill -f "scripts/ssh_server.py" 2>/dev/null || true
           sleep 1
 
-      # 3. Launch BetterDisplay and Create Virtual Display
-      - name: Create Virtual Screen
+      # 3. Strip macOS Compositor Overhead & Create 1:1 Non-HiDPI Virtual Display
+      - name: Optimize macOS & Create Virtual Screen
         env:
-          DISP_W: ${{ github.event.inputs.display_width || '1920' }}
-          DISP_H: ${{ github.event.inputs.display_height || '1080' }}
+          DISP_W: ${{ github.event.inputs.display_width || '1280' }}
+          DISP_H: ${{ github.event.inputs.display_height || '720' }}
         run: |
-          echo "=== Launching BetterDisplay & Initializing Virtual Display ==="
+          echo "=== Disabling macOS Window Animations, Transparency & Background Indexing ==="
+          defaults write NSGlobalDomain NSAutomaticWindowAnimationsEnabled -bool false || true
+          defaults write NSGlobalDomain NSWindowResizeTime -float 0.001 || true
+          defaults write com.apple.universalaccess reduceTransparency -bool true || true
+          defaults write com.apple.universalaccess reduceMotion -bool true || true
+          defaults write com.apple.dock expose-animation-duration -float 0.05 || true
+          defaults write com.apple.dock launchanim -bool false || true
+          defaults write com.apple.dock autohide-time-modifier -float 0.05 || true
+          sudo mdutil -a -i off 2>/dev/null || true
+          sudo softwareupdate --schedule off 2>/dev/null || true
+          killall Dock 2>/dev/null || true
+
+          echo "=== Launching BetterDisplay & Creating Non-HiDPI Virtual Display ==="
           /Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &
           sleep 5
 
-          betterdisplaycli create -deviceType=virtualScreen -virtualScreenName="StreamDisplay" -aspectWidth=16 -aspectHeight=9 || true
+          betterdisplaycli create -deviceType=virtualScreen -virtualScreenName="StreamDisplay" -aspectWidth=16 -aspectHeight=9 -virtualScreenHiDPI=off || true
           sleep 3
           betterdisplaycli set -name="StreamDisplay" -connected=on || true
-          sleep 2
-          betterdisplaycli set -tagID=4 -resolution="${DISP_W}x${DISP_H}" || true
-          betterdisplaycli set -tagID=4 -main=on || true
+          betterdisplaycli set -name="StreamDisplay" -virtualScreenHiDPI=off || true
           sleep 2
 
-          echo "Displays registered:"
-          betterdisplaycli get -identifiers || true
+          echo "=== Configuring 1:1 Non-HiDPI Resolution (${DISP_W}x${DISP_H}) & Mirroring via displayplacer ==="
+          python3 - "$DISP_W" "$DISP_H" << 'PYEOF'
+          import ctypes, json, re, subprocess, sys
+
+          target_w, target_h = sys.argv[1], sys.argv[2]
+          stream_cg_id = "2"
+          apple_cg_id = "1"
+          try:
+              raw_ident = subprocess.check_output(["betterdisplaycli", "get", "-identifiers"], text=True, stderr=subprocess.DEVNULL)
+              items = json.loads("[" + raw_ident.strip().strip(",") + "]")
+              for it in items:
+                  if it.get("name") == "StreamDisplay" and it.get("displayID"):
+                      stream_cg_id = str(it["displayID"])
+                  elif "Apple Virtual" in it.get("name", "") and it.get("displayID"):
+                      apple_cg_id = str(it["displayID"])
+          except Exception as e:
+              print("Warning parsing betterdisplaycli identifiers:", e)
+
+          with open("/tmp/stream_display_id.txt", "w") as f:
+              f.write(stream_cg_id)
+
+          dp_out = subprocess.run(["displayplacer", "list"], capture_output=True, text=True).stdout
+          print(dp_out)
+
+          # Map contextual screen id -> persistent screen id
+          blocks = dp_out.split("Persistent screen id:")
+          ctx_to_pers = {}
+          for b in blocks[1:]:
+              lines = b.strip().splitlines()
+              pers_id = lines[0].strip()
+              m = re.search(r"Contextual screen id:\s*(\d+)", b)
+              if m:
+                  ctx_to_pers[m.group(1)] = pers_id
+
+          s_id = ctx_to_pers.get(stream_cg_id, stream_cg_id)
+          a_id = ctx_to_pers.get(apple_cg_id, apple_cg_id)
+          with open("/tmp/stream_dp_ids.txt", "w") as f:
+              f.write(f"{s_id}\n{a_id}\n")
+
+          # Try mirroring Apple Virtual onto StreamDisplay at exact 1:1 non-HiDPI resolution
+          cmds = [
+              ["displayplacer", f"id:{s_id}+{a_id} res:{target_w}x{target_h} scaling:off origin:(0,0) degree:0"],
+              ["displayplacer", f"id:{s_id} res:{target_w}x{target_h} scaling:off origin:(0,0) degree:0"],
+              ["displayplacer", f"id:{s_id} res:{target_w}x{target_h} origin:(0,0) degree:0"],
+          ]
+          for cmd in cmds:
+              print("Running:", " ".join(cmd))
+              r = subprocess.run(cmd, capture_output=True, text=True)
+              print(r.stdout, r.stderr)
+              if r.returncode == 0:
+                  break
+
+          # Verify actual pixel dimensions via CoreGraphics
+          try:
+              cg = ctypes.cdll.LoadLibrary("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")
+              cg.CGDisplayPixelsWide.argtypes = [ctypes.c_uint32]
+              cg.CGDisplayPixelsWide.restype = ctypes.c_size_t
+              cg.CGDisplayPixelsHigh.argtypes = [ctypes.c_uint32]
+              cg.CGDisplayPixelsHigh.restype = ctypes.c_size_t
+              did = int(stream_cg_id)
+              pw = cg.CGDisplayPixelsWide(did)
+              ph = cg.CGDisplayPixelsHigh(did)
+              actual = f"{pw}x{ph}"
+          except Exception as e:
+              actual = f"error:{e}"
+          print(f"✅ Verified StreamDisplay (CGDirectDisplayID={stream_cg_id}) actual framebuffer: {actual}")
+          with open("/tmp/active_resolution.txt", "w") as f:
+              f.write(actual)
+          PYEOF
+
+          # Install convenient 'set-res' CLI helper for live SSH resolution switching
+          cat << 'EOF' > /opt/homebrew/bin/set-res
+          #!/bin/bash
+          RES="${1:-1280x720}"
+          SID=$(sed -n '1p' /tmp/stream_dp_ids.txt 2>/dev/null || echo "2")
+          AID=$(sed -n '2p' /tmp/stream_dp_ids.txt 2>/dev/null || echo "1")
+          displayplacer "id:${SID}+${AID} res:${RES} scaling:off origin:(0,0) degree:0" || \
+          displayplacer "id:${SID} res:${RES} scaling:off origin:(0,0) degree:0"
+          echo "Updated display resolution to $RES (scaling:off)"
+          EOF
+          sed -i '' 's/^[[:space:]]*//' /opt/homebrew/bin/set-res
+          chmod +x /opt/homebrew/bin/set-res
 
       # 4. Connect runner to your Tailscale network
       - name: Connect to Tailscale
@@ -180,7 +270,24 @@ jobs:
           PYEOF
           )
 
-          printf "sunshine_name = macOS-Runner\naddress_family = both\norigin_web_ui_allowed = wan\ncsrf_allowed_origins = %s\n" "$ORIGINS" > ~/.config/sunshine/sunshine.conf
+          STREAM_CG_ID=$(cat /tmp/stream_display_id.txt 2>/dev/null || echo "2")
+          ACTIVE_RES=$(cat /tmp/active_resolution.txt 2>/dev/null || echo "unknown")
+
+          cat << EOF > ~/.config/sunshine/sunshine.conf
+          sunshine_name = macOS-Runner
+          address_family = both
+          origin_web_ui_allowed = wan
+          csrf_allowed_origins = $ORIGINS
+          output_name = $STREAM_CG_ID
+          encoder = videotoolbox
+          vt_coder = cavlc
+          vt_realtime = enabled
+          vt_software = disabled
+          fec_percentage = 5
+          qp = 26
+          min_threads = 2
+          EOF
+          sed -i '' 's/^[[:space:]]*//' ~/.config/sunshine/sunshine.conf
 
           echo "=== Generated ~/.config/sunshine/sunshine.conf ==="
           cat ~/.config/sunshine/sunshine.conf
@@ -219,9 +326,9 @@ jobs:
           wait $PRE_PID 2>/dev/null || true
 
           mkdir -p /tmp/conn-info
-          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" << 'PYEOF' > /tmp/conn-info/connection-info.json
+          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" "$STREAM_CG_ID" "$ACTIVE_RES" << 'PYEOF' > /tmp/conn-info/connection-info.json
           import json, sys
-          ip4, ip6, fqdn, host, user, csrf = sys.argv[1:7]
+          ip4, ip6, fqdn, host, user, csrf, disp_id, active_res = sys.argv[1:9]
           print(json.dumps({
               "tailscale_ipv4": ip4,
               "tailscale_ipv6": ip6,
@@ -231,7 +338,9 @@ jobs:
               "sunshine_web_ui": f"https://{ip4}:47990",
               "sunshine_web_ui_fqdn": f"https://{fqdn}:47990" if fqdn else "",
               "username": user,
-              "csrf_preflight": csrf
+              "csrf_preflight": csrf,
+              "stream_display_id": disp_id,
+              "active_resolution": active_res
           }, indent=2))
           PYEOF
           cat /tmp/conn-info/connection-info.json
@@ -286,4 +395,8 @@ jobs:
           echo "Password:           ${SUN_PASS}"
           echo "=========================================================="
 
-          exec sunshine ~/.config/sunshine/sunshine.conf
+          while true; do
+            sunshine ~/.config/sunshine/sunshine.conf || true
+            echo "Sunshine exited — restarting in 2 seconds..."
+            sleep 2
+          done
