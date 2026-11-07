@@ -1,4 +1,4 @@
-name: Sunshine macOS-latest (5 vCPU / 14 GB Spec Gate)
+name: Sunshine macOS-latest (3x Parallel 5 vCPU / 14 GB Spec Gate)
 
 on:
   workflow_dispatch:
@@ -32,7 +32,7 @@ on:
         required: false
         default: '14'
       auto_reroll:
-        description: 'Automatically re-run workflow (up to 5x) if 3 vCPU / 7 GB runner is allocated'
+        description: 'If all 3 parallel slots roll 3 vCPU / 7 GB, auto-launch a fresh 3x batch (up to 5x)'
         required: false
         type: boolean
         default: false
@@ -47,30 +47,29 @@ permissions:
 
 jobs:
   sunshine-macos-latest:
-    name: macOS-latest Spec Check & Sunshine Streamer
+    name: "Slot ${{ matrix.slot }} — macOS-latest Spec Check & Streamer"
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2, 3]
     steps:
-      # 0. Check hardware specs FIRST (<1s) before checkout or installs:
+      # 0. Check hardware specs FIRST (<1s) on all 3 parallel runners:
       #    - 3 vCPU / 7 GB RAM  -> end immediately
       #    - 5 vCPU / 14 GB RAM -> proceed
       - name: Check Runner Hardware Specs
         id: specs
         env:
+          SLOT: ${{ matrix.slot }}
           MIN_VCPU: ${{ inputs.min_vcpu || '5' }}
           MIN_RAM_GB: ${{ inputs.min_ram_gb || '14' }}
-          AUTO_REROLL: ${{ inputs.auto_reroll || false }}
           ATTEMPT: ${{ inputs.reroll_attempt || '1' }}
-          GH_TOKEN: ${{ github.token }}
-          IN_TS_KEY: ${{ inputs.tailscale_authkey }}
-          IN_W: ${{ inputs.display_width || '1280' }}
-          IN_H: ${{ inputs.display_height || '720' }}
-          IN_USER: ${{ inputs.sunshine_user || 'runner' }}
-          IN_PASS: ${{ inputs.sunshine_password || 'root' }}
         run: |
           VCPU=$(sysctl -n hw.ncpu)
           MEM_BYTES=$(sysctl -n hw.memsize)
           RAM_GB=$(python3 -c "print(round(${MEM_BYTES} / (1024**3)))")
           CHIP=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Apple Silicon")
+          ARCH=$(uname -m)
           MACOS_VER=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
 
           echo "$CHIP" > /tmp/cpu_chip.txt
@@ -78,13 +77,13 @@ jobs:
           echo "$RAM_GB" > /tmp/ram_gb.txt
 
           echo "=========================================================="
-          echo "🔍 GITHUB MACOS-LATEST HARDWARE SPEC CHECK"
+          echo "🔍 [SLOT #${SLOT}] GITHUB MACOS-LATEST HARDWARE SPEC CHECK"
           echo "=========================================================="
-          echo "CPU Chip:     $CHIP"
+          echo "CPU Chip:     $CHIP ($ARCH)"
           echo "macOS:        $MACOS_VER"
           echo "Detected:     ${VCPU} vCPU / ${RAM_GB} GB RAM (${MEM_BYTES} bytes)"
           echo "Required:     >= ${MIN_VCPU} vCPU / >= ${MIN_RAM_GB} GB RAM"
-          echo "Attempt:      #${ATTEMPT}"
+          echo "Batch:        #${ATTEMPT} (Slot ${SLOT} of 3)"
           echo "=========================================================="
 
           echo "vcpu=${VCPU}" >> "$GITHUB_OUTPUT"
@@ -92,68 +91,30 @@ jobs:
 
           if [ "$VCPU" -lt "$MIN_VCPU" ] || [ "$RAM_GB" -lt "$MIN_RAM_GB" ]; then
             echo "proceed=false" >> "$GITHUB_OUTPUT"
-            echo "🛑 Rolled low-spec runner (${VCPU} vCPU / ${RAM_GB} GB RAM). Ending job immediately to avoid lag!"
+            echo "🛑 [Slot #${SLOT}] Rolled low-spec runner (${VCPU} vCPU / ${RAM_GB} GB RAM). Ending slot immediately!"
 
             {
-              echo "### ❌ Low-Spec Runner Skipped (${VCPU} vCPU / ${RAM_GB} GB RAM)"
+              echo "### ❌ Slot #${SLOT}: Low-Spec Runner Skipped (${VCPU} vCPU / ${RAM_GB} GB RAM)"
               echo "| Metric | Detected | Required |"
               echo "| :--- | :--- | :--- |"
-              echo "| **CPU** | \`${VCPU} vCPU\` (${CHIP}) | \`>= ${MIN_VCPU} vCPU\` |"
+              echo "| **CPU** | \`${VCPU} vCPU\` (${CHIP} / ${ARCH}) | \`>= ${MIN_VCPU} vCPU\` |"
               echo "| **RAM** | \`${RAM_GB} GB\` | \`>= ${MIN_RAM_GB} GB\` |"
               echo ""
               echo "Ended immediately without running setup because the 3 vCPU / 7 GB runner lags."
             } >> "$GITHUB_STEP_SUMMARY"
-
-            if [ "$AUTO_REROLL" = "true" ] && [ "$ATTEMPT" -lt 6 ]; then
-              NEXT=$((ATTEMPT + 1))
-              echo "🔄 Auto-reroll enabled — dispatching attempt #${NEXT}..."
-              python3 - << 'PYEOF'
-          import json, os, urllib.request
-          repo = os.environ["GITHUB_REPOSITORY"]
-          ref = os.environ["GITHUB_REF_NAME"]
-          token = os.environ["GH_TOKEN"]
-          next_attempt = str(int(os.environ.get("ATTEMPT", "1")) + 1)
-          payload = {
-              "ref": ref,
-              "inputs": {
-                  "tailscale_authkey": os.environ.get("IN_TS_KEY", ""),
-                  "display_width": os.environ.get("IN_W", "1280"),
-                  "display_height": os.environ.get("IN_H", "720"),
-                  "sunshine_user": os.environ.get("IN_USER", "runner"),
-                  "sunshine_password": os.environ.get("IN_PASS", "root"),
-                  "min_vcpu": os.environ.get("MIN_VCPU", "5"),
-                  "min_ram_gb": os.environ.get("MIN_RAM_GB", "14"),
-                  "auto_reroll": True,
-                  "reroll_attempt": next_attempt,
-              },
-          }
-          req = urllib.request.Request(
-              f"https://api.github.com/repos/{repo}/actions/workflows/sunshine-macos-latest-5vcpu.yml/dispatches",
-              data=json.dumps(payload).encode(),
-              method="POST",
-              headers={
-                  "Authorization": f"Bearer {token}",
-                  "Accept": "application/vnd.github+json",
-                  "Content-Type": "application/json",
-              },
-          )
-          urllib.request.urlopen(req).read()
-          print(f"✅ Triggered auto-reroll attempt #{next_attempt}")
-          PYEOF
-            fi
             exit 0
           fi
 
           echo "proceed=true" >> "$GITHUB_OUTPUT"
-          echo "✅ High-spec runner confirmed (${VCPU} vCPU / ${RAM_GB} GB RAM)! Proceeding with setup..."
+          echo "✅ [Slot #${SLOT}] High-spec runner confirmed (${VCPU} vCPU / ${RAM_GB} GB RAM)! Proceeding with setup..."
           {
-            echo "### ✅ High-Spec Runner Confirmed (${VCPU} vCPU / ${RAM_GB} GB RAM)"
+            echo "### ✅ Slot #${SLOT}: High-Spec Runner Proceeding (${VCPU} vCPU / ${RAM_GB} GB RAM)"
             echo "| Metric | Detected | Required |"
             echo "| :--- | :--- | :--- |"
-            echo "| **CPU** | \`${VCPU} vCPU\` (${CHIP}) | \`>= ${MIN_VCPU} vCPU\` |"
+            echo "| **CPU** | \`${VCPU} vCPU\` (${CHIP} / ${ARCH}) | \`>= ${MIN_VCPU} vCPU\` |"
             echo "| **RAM** | \`${RAM_GB} GB\` | \`>= ${MIN_RAM_GB} GB\` |"
             echo ""
-            echo "Proceeding with BetterDisplay, Tailscale, SSH, and Sunshine (with 48kHz ScreenCaptureKit audio)!"
+            echo "Proceeding with BetterDisplay, Tailscale (\`macos-5vcpu-slot-${SLOT}\`), SSH, and Sunshine (with 48kHz ScreenCaptureKit audio)!"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout Code
@@ -180,23 +141,25 @@ jobs:
           brew install lizardbyte/homebrew/sunshine
 
           echo "=== Applying ScreenCaptureKit 48kHz Stereo Audio Patch to Sunshine ==="
-          SUN_BIN="$(brew --prefix sunshine)/bin/sunshine"
-          REAL_SUN="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$SUN_BIN")"
-          cp -a "$REAL_SUN" "${REAL_SUN}.stock"
-          if curl -fsSL --max-time 30 \
-            "https://github.com/polly67/workflow-benchs/releases/download/v1.0-moonlight-wasd/sunshine-macos-arm64-sck-audio.tar.gz" \
-            -o /tmp/sunshine-sck.tar.gz; then
-            tar -xzf /tmp/sunshine-sck.tar.gz -C /tmp
-            chmod +x /tmp/sunshine
-            codesign --force --sign - /tmp/sunshine 2>/dev/null || true
-            cp -f /tmp/sunshine "$REAL_SUN"
-            if sunshine --version >/dev/null 2>&1; then
-              echo "✅ Installed ScreenCaptureKit 48kHz stereo audio-fixed Sunshine binary!"
-            else
-              echo "⚠️ Dynamic library mismatch on patched binary — keeping stock Homebrew Sunshine"
-              cp -f "${REAL_SUN}.stock" "$REAL_SUN"
+          if [ "$(uname -m)" = "arm64" ]; then
+            SUN_BIN="$(brew --prefix sunshine)/bin/sunshine"
+            REAL_SUN="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$SUN_BIN")"
+            cp -a "$REAL_SUN" "${REAL_SUN}.stock"
+            if curl -fsSL --max-time 30 \
+              "https://github.com/polly67/workflow-benchs/releases/download/v1.0-moonlight-wasd/sunshine-macos-arm64-sck-audio.tar.gz" \
+              -o /tmp/sunshine-sck.tar.gz; then
+              tar -xzf /tmp/sunshine-sck.tar.gz -C /tmp
+              chmod +x /tmp/sunshine
+              codesign --force --sign - /tmp/sunshine 2>/dev/null || true
+              cp -f /tmp/sunshine "$REAL_SUN"
+              if sunshine --version >/dev/null 2>&1; then
+                echo "✅ Installed ScreenCaptureKit 48kHz stereo audio-fixed Sunshine binary!"
+              else
+                echo "⚠️ Dynamic library mismatch on patched binary — keeping stock Homebrew Sunshine"
+                cp -f "${REAL_SUN}.stock" "$REAL_SUN"
+              fi
+              rm -f /tmp/sunshine /tmp/sunshine-sck.tar.gz
             fi
-            rm -f /tmp/sunshine /tmp/sunshine-sck.tar.gz
           fi
 
           echo "=== Installing AsyncSSH for SSH Server ==="
@@ -382,22 +345,23 @@ jobs:
           sudo cp /tmp/set-res /usr/local/bin/set-res
           cp /tmp/set-res /opt/homebrew/bin/set-res 2>/dev/null || true
 
-      # 4. Connect runner to your Tailscale network
+      # 4. Connect runner to your Tailscale network with unique per-slot hostname
       - name: Connect to Tailscale
         if: steps.specs.outputs.proceed == 'true'
         uses: tailscale/github-action@v4
         with:
           authkey: ${{ inputs.tailscale_authkey || secrets.TAILSCALE_AUTHKEY }}
+          hostname: macos-5vcpu-slot-${{ matrix.slot }}
           version: latest
 
       # 5. Configure Sunshine (runner / root + CSRF allowed origins) & Preflight Test
       - name: Configure Sunshine & Verify CSRF
         if: steps.specs.outputs.proceed == 'true'
         env:
+          SLOT: ${{ matrix.slot }}
           SUN_USER: ${{ inputs.sunshine_user || 'runner' }}
           SUN_PASS: ${{ inputs.sunshine_password || 'root' }}
         run: |
-          # Restore public DNS resolvers alongside Tailscale MagicDNS so Safari, brew, curl & artifact upload work
           sudo tailscale set --accept-dns=false 2>/dev/null || true
           networksetup -listallnetworkservices | tail -n +2 | sed 's/^\*//' | while IFS= read -r svc; do
             if [ -n "$svc" ]; then
@@ -434,7 +398,7 @@ jobs:
           ACTIVE_RES=$(cat /tmp/active_resolution.txt 2>/dev/null || echo "unknown")
 
           cat << EOF > ~/.config/sunshine/sunshine.conf
-          sunshine_name = macOS-5vCPU-Runner
+          sunshine_name = macOS-5vCPU-Slot-${SLOT}
           address_family = both
           origin_web_ui_allowed = wan
           csrf_allowed_origins = $ORIGINS
@@ -499,14 +463,15 @@ jobs:
           RAM_CNT=$(cat /tmp/ram_gb.txt 2>/dev/null | head -n1 || echo "14")
           MACOS_VER=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
 
-          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" "$STREAM_CG_ID" "$ACTIVE_RES" "$LOCAL_USER" "$CPU_CHIP" "$MACOS_VER" "$CAPTURE_STATUS" "$VCPU_CNT" "$RAM_CNT" << 'PYEOF' > /tmp/conn-info/connection-info.json
+          python3 - "$SLOT" "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" "$STREAM_CG_ID" "$ACTIVE_RES" "$LOCAL_USER" "$CPU_CHIP" "$MACOS_VER" "$CAPTURE_STATUS" "$VCPU_CNT" "$RAM_CNT" << 'PYEOF' > /tmp/conn-info/connection-info.json
           import json, sys
-          ip4, ip6, fqdn, host, user, csrf, disp_id, active_res, local_user, cpu_chip, macos_ver, cap_status, vcpu, ram_gb = sys.argv[1:15]
+          slot, ip4, ip6, fqdn, host, user, csrf, disp_id, active_res, local_user, cpu_chip, macos_ver, cap_status, vcpu, ram_gb = sys.argv[1:16]
           try:
               geo = json.load(open("/tmp/geo.json"))
           except Exception:
               geo = {}
           print(json.dumps({
+              "slot": int(slot),
               "vcpu": int(vcpu),
               "ram_gb": int(ram_gb),
               "tailscale_ipv4": ip4,
@@ -532,13 +497,13 @@ jobs:
           PYEOF
           cat /tmp/conn-info/connection-info.json
 
-      # 6. Publish connection info immediately so it is accessible while Sunshine runs
-      - name: Upload Connection Info
+      # 6. Publish per-slot connection info immediately while Sunshine runs
+      - name: Upload Connection Info (Slot ${{ matrix.slot }})
         if: steps.specs.outputs.proceed == 'true'
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: sunshine-connection-info
+          name: sunshine-connection-info-slot-${{ matrix.slot }}
           path: /tmp/conn-info/
           retention-days: 1
 
@@ -546,6 +511,7 @@ jobs:
       - name: Start SSH, Sunshine & Keep Alive
         if: steps.specs.outputs.proceed == 'true'
         env:
+          SLOT: ${{ matrix.slot }}
           SUN_USER: ${{ inputs.sunshine_user || 'runner' }}
           SUN_PASS: ${{ inputs.sunshine_password || 'root' }}
         run: |
@@ -553,7 +519,6 @@ jobs:
 
           pgrep -x BetterDisplay >/dev/null || (/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &)
 
-          # If GitHub-hosted macos-latest requires 1-time Screen Recording approval, enable macOS VNC on :5900 over Tailscale
           if grep -qi "No screen capture permission" /tmp/sunshine-preflight.log 2>/dev/null; then
             sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
               -activate -configure -access -on \
@@ -585,8 +550,9 @@ jobs:
           VCPU_CNT=$(cat /tmp/vcpu_count.txt 2>/dev/null || echo "5")
           RAM_CNT=$(cat /tmp/ram_gb.txt 2>/dev/null || echo "14")
           echo "=========================================================="
-          echo "🎉 SUNSHINE & SSH ARE LIVE ON MACOS (${VCPU_CNT} vCPU / ${RAM_CNT} GB RAM)!"
+          echo "🎉 [SLOT #${SLOT}] SUNSHINE & SSH ARE LIVE (${VCPU_CNT} vCPU / ${RAM_CNT} GB RAM)!"
           echo "=========================================================="
+          echo "Tailscale Hostname: macos-5vcpu-slot-${SLOT}"
           echo "Tailscale IP:       $TS_IP"
           echo "SSH Access:         ssh ${SUN_USER}@${TS_IP}  (password: ${SUN_PASS})"
           echo "Sunshine Web UI:    https://${TS_IP}:47990"
@@ -600,3 +566,76 @@ jobs:
             echo "Sunshine exited — restarting in 2 seconds..."
             sleep 2
           done
+
+  # Optional coordinator: only runs AFTER all 3 slots finish if ALL 3 rolled low-spec and auto_reroll=true
+  reroll-if-all-low-spec:
+    name: Auto-Reroll Batch if All 3 Were Low-Spec
+    needs: sunshine-macos-latest
+    if: ${{ always() && (inputs.auto_reroll == true || inputs.auto_reroll == 'true') }}
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ATTEMPT: ${{ inputs.reroll_attempt || '1' }}
+      IN_TS_KEY: ${{ inputs.tailscale_authkey }}
+      IN_W: ${{ inputs.display_width || '1280' }}
+      IN_H: ${{ inputs.display_height || '720' }}
+      IN_USER: ${{ inputs.sunshine_user || 'runner' }}
+      IN_PASS: ${{ inputs.sunshine_password || 'root' }}
+      MIN_VCPU: ${{ inputs.min_vcpu || '5' }}
+      MIN_RAM_GB: ${{ inputs.min_ram_gb || '14' }}
+    steps:
+      - name: Check If Any Slot Proceeded
+        run: |
+          python3 - << 'PYEOF'
+          import json, os, urllib.request
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          run_id = os.environ["GITHUB_RUN_ID"]
+          ref = os.environ["GITHUB_REF_NAME"]
+          token = os.environ["GH_TOKEN"]
+          attempt = int(os.environ.get("ATTEMPT", "1"))
+          headers = {
+              "Authorization": f"Bearer {token}",
+              "Accept": "application/vnd.github+json",
+          }
+
+          req = urllib.request.Request(f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs", headers=headers)
+          with urllib.request.urlopen(req) as r:
+              jobs = json.load(r).get("jobs", [])
+
+          any_proceeded = False
+          for j in jobs:
+              for st in j.get("steps", []):
+                  if st.get("name") == "Checkout Code" and st.get("conclusion") not in ("skipped", None):
+                      any_proceeded = True
+
+          if any_proceeded:
+              print("✅ At least one 5 vCPU / 14 GB slot ran — no reroll needed.")
+          elif attempt >= 5:
+              print("🛑 Reached max auto-reroll batches (5).")
+          else:
+              next_attempt = str(attempt + 1)
+              print(f"🔄 All 3 slots were low-spec! Dispatching fresh 3x batch #{next_attempt}...")
+              payload = {
+                  "ref": ref,
+                  "inputs": {
+                      "tailscale_authkey": os.environ.get("IN_TS_KEY", ""),
+                      "display_width": os.environ.get("IN_W", "1280"),
+                      "display_height": os.environ.get("IN_H", "720"),
+                      "sunshine_user": os.environ.get("IN_USER", "runner"),
+                      "sunshine_password": os.environ.get("IN_PASS", "root"),
+                      "min_vcpu": os.environ.get("MIN_VCPU", "5"),
+                      "min_ram_gb": os.environ.get("MIN_RAM_GB", "14"),
+                      "auto_reroll": True,
+                      "reroll_attempt": next_attempt,
+                  },
+              }
+              dreq = urllib.request.Request(
+                  f"https://api.github.com/repos/{repo}/actions/workflows/sunshine-macos-latest-5vcpu.yml/dispatches",
+                  data=json.dumps(payload).encode(),
+                  method="POST",
+                  headers={**headers, "Content-Type": "application/json"},
+              )
+              urllib.request.urlopen(dreq).read()
+              print(f"✅ Dispatched batch #{next_attempt}")
+          PYEOF
