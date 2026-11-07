@@ -1,0 +1,43 @@
+name: Probe Namespace EU Region
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  probe-eu:
+    runs-on: nscloud-ubuntu-24.04-amd64-2x4
+    steps:
+      - name: Setup nsc CLI
+        uses: namespacelabs/nscloud-setup@v0
+
+      - name: Probe Runner Location & EU Compute Endpoint
+        run: |
+          echo "=== 1. Default Runner Geo & NSC Env ==="
+          curl -s https://ipinfo.io/json || true
+          echo ""
+          env | grep -E '^NSC_|^NAMESPACE' || true
+          nsc workspace describe -o json || true
+
+          echo "=== 2. Test Creating EU Linux Instance (eu.compute.namespaceapis.com) ==="
+          if NSC_ENDPOINT=https://eu.compute.namespaceapis.com nsc create --machine_type linux/amd64:2x4 --duration 5m --cidfile /tmp/eu_lin_id; then
+            EU_LIN=$(cat /tmp/eu_lin_id)
+            echo "✅ Created EU Linux instance: $EU_LIN"
+            NSC_ENDPOINT=https://eu.compute.namespaceapis.com nsc ssh -T "$EU_LIN" -- "curl -s https://ipinfo.io/json" || true
+            NSC_ENDPOINT=https://eu.compute.namespaceapis.com nsc destroy "$EU_LIN" --force || true
+          else
+            echo "❌ Failed creating EU Linux instance"
+          fi
+
+          echo "=== 3. Test Creating EU macOS Instance (eu.compute.namespaceapis.com) ==="
+          if NSC_ENDPOINT=https://eu.compute.namespaceapis.com nsc create --machine_type macos/arm64:6x14 --selectors macos.version=26.x --duration 5m --cidfile /tmp/eu_mac_id; then
+            EU_MAC=$(cat /tmp/eu_mac_id)
+            echo "✅ Created EU macOS instance: $EU_MAC"
+            NSC_ENDPOINT=https://eu.compute.namespaceapis.com nsc ssh -T "$EU_MAC" -- "curl -s https://ipinfo.io/json && echo '' && sysctl -n machdep.cpu.brand_string" || true
+            NSC_ENDPOINT=https://eu.compute.namespaceapis.com nsc destroy "$EU_MAC" --force || true
+          else
+            echo "❌ Failed creating EU macOS instance"
+          fi
