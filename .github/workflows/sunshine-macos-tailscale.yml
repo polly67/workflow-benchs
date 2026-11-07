@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       runner_label:
-        description: 'Runner label (e.g. nscloud-macos-tahoe-arm64-6x14 or macos-latest)'
+        description: 'Runner label (e.g. nscloud-macos-sequoia-stable-arm64-6x14 or macos-latest)'
         required: false
-        default: 'nscloud-macos-tahoe-arm64-6x14'
+        default: 'nscloud-macos-sequoia-stable-arm64-6x14'
       tailscale_authkey:
         description: 'Tailscale Auth Key'
         required: false
@@ -34,7 +34,7 @@ permissions:
 jobs:
   sunshine-macos:
     name: Run Sunshine, SSH & Virtual Display on macOS
-    runs-on: ${{ inputs.runner_label || 'nscloud-macos-tahoe-arm64-6x14' }}
+    runs-on: ${{ inputs.runner_label || 'nscloud-macos-sequoia-stable-arm64-6x14' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -341,15 +341,34 @@ jobs:
               echo "Attempt $i returned HTTP $HTTP_CODE: $(cat /tmp/pin_resp.txt 2>/dev/null || true)"
             fi
           done
+          # Wait briefly if encoder probe hasn't finished yet in preflight log
+          for i in {1..8}; do
+            if grep -qE "No screen capture permission|Found H\.264 encoder|Screencapture failed" /tmp/sunshine-preflight.log 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
           kill $PRE_PID 2>/dev/null || true
           wait $PRE_PID 2>/dev/null || true
 
+          echo "=== Sunshine Preflight Log ==="
+          cat /tmp/sunshine-preflight.log || true
+
+          CAPTURE_STATUS="unknown"
+          if grep -qi "No screen capture permission" /tmp/sunshine-preflight.log 2>/dev/null; then
+            CAPTURE_STATUS="needs_vnc_approval"
+          elif grep -qi "Found H.264 encoder" /tmp/sunshine-preflight.log 2>/dev/null; then
+            CAPTURE_STATUS="granted_natively"
+          fi
+
           mkdir -p /tmp/conn-info
+          cp /tmp/sunshine-preflight.log /tmp/conn-info/sunshine-preflight.log 2>/dev/null || true
           LOCAL_USER=$(id -un)
           CPU_CHIP=$(cat /tmp/cpu_chip.txt 2>/dev/null | head -n1 || echo "unknown")
-          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" "$STREAM_CG_ID" "$ACTIVE_RES" "$LOCAL_USER" "$CPU_CHIP" << 'PYEOF' > /tmp/conn-info/connection-info.json
+          MACOS_VER=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
+          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" "$CSRF_STATUS" "$STREAM_CG_ID" "$ACTIVE_RES" "$LOCAL_USER" "$CPU_CHIP" "$MACOS_VER" "$CAPTURE_STATUS" << 'PYEOF' > /tmp/conn-info/connection-info.json
           import json, sys
-          ip4, ip6, fqdn, host, user, csrf, disp_id, active_res, local_user, cpu_chip = sys.argv[1:11]
+          ip4, ip6, fqdn, host, user, csrf, disp_id, active_res, local_user, cpu_chip, macos_ver, cap_status = sys.argv[1:13]
           try:
               geo = json.load(open("/tmp/geo.json"))
           except Exception:
@@ -364,11 +383,13 @@ jobs:
               "sunshine_web_ui_fqdn": f"https://{fqdn}:47990" if fqdn else "",
               "username": user,
               "local_macos_user": local_user,
+              "macos_version": macos_ver.strip(),
               "cpu_chip": cpu_chip.strip(),
               "datacenter_city": geo.get("city", ""),
               "datacenter_region": geo.get("region", ""),
               "datacenter_country": geo.get("country", ""),
               "csrf_preflight": csrf,
+              "screen_capture_status": cap_status,
               "stream_display_id": disp_id,
               "active_resolution": active_res
           }, indent=2))
@@ -381,7 +402,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sunshine-connection-info
-          path: /tmp/conn-info/connection-info.json
+          path: /tmp/conn-info/
           retention-days: 1
 
       # 7. Start SSH, Sunshine & Keep Session Active
@@ -396,8 +417,10 @@ jobs:
           # Ensure BetterDisplay is still running
           pgrep -x BetterDisplay >/dev/null || (/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &)
 
-          # Pre-open Screen Recording settings pane in case macOS TCC requires one-time approval via VNC
-          open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture" 2>/dev/null || true
+          # Only open Screen Recording settings pane if TCC permission was not pre-granted natively
+          if grep -qi "No screen capture permission" /tmp/sunshine-preflight.log 2>/dev/null; then
+            open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture" 2>/dev/null || true
+          fi
 
           # Start persistent AsyncSSH server on port 22 inside final step so it stays alive
           LOCAL_USER=$(id -un)
