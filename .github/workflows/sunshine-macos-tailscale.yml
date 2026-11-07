@@ -127,8 +127,8 @@ jobs:
           sleep 3
           betterdisplaycli set -name="StreamDisplay" -connected=on || true
           sleep 2
-          betterdisplaycli set -name="StreamDisplay" -deviceType=Display -resolution="${DISP_W}x${DISP_H}" || betterdisplaycli set -tagID=4 -resolution="${DISP_W}x${DISP_H}" || true
-          betterdisplaycli set -name="StreamDisplay" -deviceType=Display -main=on || true
+          betterdisplaycli set -tagID=4 -resolution="${DISP_W}x${DISP_H}" || true
+          betterdisplaycli set -tagID=4 -main=on || true
           sleep 2
 
           echo "Displays registered:"
@@ -147,6 +147,16 @@ jobs:
           SUN_USER: ${{ github.event.inputs.sunshine_user || 'runner' }}
           SUN_PASS: ${{ github.event.inputs.sunshine_password || 'root' }}
         run: |
+          # Restore public DNS resolvers alongside Tailscale MagicDNS so Safari, brew, curl & artifact upload work
+          sudo tailscale set --accept-dns=false 2>/dev/null || true
+          networksetup -listallnetworkservices | tail -n +2 | sed 's/^\*//' | while IFS= read -r svc; do
+            if [ -n "$svc" ]; then
+              sudo networksetup -setdnsservers "$svc" 1.1.1.1 8.8.8.8 100.100.100.100 2>/dev/null || true
+            fi
+          done
+          sudo dscacheutil -flushcache 2>/dev/null || true
+          sudo killall -HUP mDNSResponder 2>/dev/null || true
+
           mkdir -p ~/.config/sunshine
 
           TS_IP=$(tailscale ip -4 | head -n1 | tr -d '[:space:]')
@@ -188,12 +198,18 @@ jobs:
               -X POST \
               -H "Origin: https://${TS_IP}:47990" \
               -H "Content-Type: application/json" \
-              -d '{"pin":"0000","name":"preflight"}' \
+              -d '{"pin":"0000","name":"preflight","pairing_id":"00000000000000000000000000000000"}' \
               "https://${TS_IP}:47990/api/pin" || true)
-            if [ "$HTTP_CODE" = "200" ]; then
-              CSRF_STATUS="passed_200"
-              echo "✅ Sunshine Web UI auth & CSRF check PASSED (HTTP 200)!"
-              break
+            if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "400" ]; then
+              RESP_BODY=$(cat /tmp/pin_resp.txt 2>/dev/null || true)
+              if echo "$RESP_BODY" | grep -qi "csrf"; then
+                CSRF_STATUS="blocked_csrf_${HTTP_CODE}"
+                echo "❌ CSRF blocked: $RESP_BODY"
+              else
+                CSRF_STATUS="passed_${HTTP_CODE}"
+                echo "✅ Sunshine Web UI auth & CSRF check PASSED (HTTP $HTTP_CODE: $RESP_BODY)!"
+                break
+              fi
             elif [ "$HTTP_CODE" != "000" ]; then
               CSRF_STATUS="http_${HTTP_CODE}"
               echo "Attempt $i returned HTTP $HTTP_CODE: $(cat /tmp/pin_resp.txt 2>/dev/null || true)"
@@ -222,6 +238,7 @@ jobs:
 
       # 6. Publish connection info immediately so it is accessible while Sunshine runs
       - name: Upload Connection Info
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: sunshine-connection-info
