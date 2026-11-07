@@ -1,0 +1,90 @@
+name: Sunshine & BetterDisplay macOS Streamer via Tailscale
+
+on:
+  workflow_dispatch:
+    inputs:
+      display_width:
+        description: 'Virtual Display Width'
+        required: false
+        default: '1920'
+      display_height:
+        description: 'Virtual Display Height'
+        required: false
+        default: '1080'
+      sunshine_password:
+        description: 'Sunshine Admin Web Password'
+        required: false
+        default: 'SunshineStream123!'
+
+permissions:
+  contents: read
+
+jobs:
+  sunshine-macos:
+    name: Run Sunshine & Virtual Display on macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # 1. Connect runner to your Tailscale network
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          tags: tag:ci
+          version: latest
+
+      # 2. Install BetterDisplay, CLI and Sunshine
+      - name: Install BetterDisplay & Sunshine
+        run: |
+          echo "=== Installing BetterDisplay & Sunshine via Homebrew ==="
+          brew install --cask betterdisplay
+          brew install waydabber/betterdisplay/betterdisplaycli
+          brew install lizardbyte/homebrew/sunshine
+
+      # 3. Launch BetterDisplay and Create Virtual Display
+      - name: Create Virtual Screen
+        run: |
+          echo "=== Launching BetterDisplay & Initializing Virtual Display ==="
+          open -a BetterDisplay || /Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay &
+          sleep 5
+
+          betterdisplaycli create -deviceType=virtualScreen -virtualScreenName="StreamDisplay" -aspectWidth=16 -aspectHeight=9 || true
+          sleep 3
+          betterdisplaycli set -name="StreamDisplay" -connected=on || true
+          betterdisplaycli set -name="StreamDisplay" -resolution=${{ github.event.inputs.display_width }}x${{ github.event.inputs.display_height }} || true
+          sleep 2
+
+          echo "Displays registered:"
+          betterdisplaycli get -identifiers || true
+
+      # 4. Configure Sunshine Credentials
+      - name: Configure Sunshine
+        run: |
+          mkdir -p ~/.config/sunshine
+          echo "Setting up Sunshine credentials..."
+          sunshine --creds admin "${{ github.event.inputs.sunshine_password }}"
+
+      # 5. Start Sunshine & Keep Session Active
+      - name: Start Sunshine & Keep Alive
+        run: |
+          TS_IP=$(tailscale ip -4 || echo "127.0.0.1")
+          echo "=========================================================="
+          echo "🎉 SUNSHINE IS READY FOR MOONLIGHT STREAMING!"
+          echo "=========================================================="
+          echo "Tailscale IP:       $TS_IP"
+          echo "Sunshine Web UI:    https://$TS_IP:47990"
+          echo "Web UI Username:    admin"
+          echo "Web UI Password:    ${{ github.event.inputs.sunshine_password }}"
+          echo ""
+          echo "To Connect via Moonlight:"
+          echo "1. Open Moonlight on your PC / Phone / Tablet."
+          echo "2. Add Host Manually -> Enter IP: $TS_IP"
+          echo "3. Moonlight will give you a 4-digit PIN."
+          echo "4. Open https://$TS_IP:47990 in your browser, log in, and enter the PIN under 'PIN'."
+          echo "5. Click on the desktop in Moonlight to start streaming!"
+          echo "=========================================================="
+
+          # Run Sunshine as main foreground process
+          sunshine
