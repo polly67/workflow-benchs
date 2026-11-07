@@ -32,10 +32,10 @@ on:
         required: false
         default: '14'
       auto_reroll:
-        description: 'If all 3 parallel slots roll 3 vCPU / 7 GB, auto-launch a fresh 3x batch (up to 5x)'
+        description: 'If all 3 parallel slots roll 3 vCPU / 7 GB, auto-launch a fresh 3x batch (up to 10x)'
         required: false
         type: boolean
-        default: false
+        default: true
       reroll_attempt:
         description: 'Internal reroll counter'
         required: false
@@ -611,8 +611,8 @@ jobs:
 
           if any_proceeded:
               print("✅ At least one 5 vCPU / 14 GB slot ran — no reroll needed.")
-          elif attempt >= 5:
-              print("🛑 Reached max auto-reroll batches (5).")
+          elif attempt >= 10:
+              print("🛑 Reached max auto-reroll batches (10).")
           else:
               next_attempt = str(attempt + 1)
               print(f"🔄 All 3 slots were low-spec! Dispatching fresh 3x batch #{next_attempt}...")
