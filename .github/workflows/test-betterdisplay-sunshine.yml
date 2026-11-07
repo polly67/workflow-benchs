@@ -1,0 +1,44 @@
+name: Test BetterDisplay & Sunshine on macOS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/test-betterdisplay-sunshine.yml'
+      - 'scripts/test_betterdisplay_sunshine.sh'
+
+permissions:
+  contents: write
+
+jobs:
+  test-sunshine:
+    name: BetterDisplay Virtual Screen & Sunshine Probe
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run BetterDisplay & Sunshine Test
+        run: |
+          chmod +x scripts/test_betterdisplay_sunshine.sh
+          bash scripts/test_betterdisplay_sunshine.sh
+
+      - name: Upload Logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: betterdisplay-sunshine-logs
+          path: results/
+          retention-days: 7
+
+      - name: Commit & Push Results
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || true
+          git add results/
+          if ! git diff --staged --quiet; then
+            git commit -m "docs: add betterdisplay and sunshine probe results [skip ci]"
+            git push origin main
+          else
+            echo "No new results"
+          fi
