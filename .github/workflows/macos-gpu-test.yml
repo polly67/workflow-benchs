@@ -1,0 +1,54 @@
+name: macOS Runner GPU Test & Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/macos-gpu-test.yml'
+      - 'scripts/gpu_test.swift'
+      - 'scripts/gpu_benchmark.py'
+
+permissions:
+  contents: write
+
+jobs:
+  gpu-test:
+    name: Test GPU on macOS Runner
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyTorch
+        run: |
+          pip install torch --extra-index-url https://download.pytorch.org/whl/cpu || pip install torch || true
+
+      - name: Run GPU Diagnostic & Benchmark
+        run: |
+          chmod +x scripts/gpu_benchmark.py
+          python3 scripts/gpu_benchmark.py
+
+      - name: Upload Results Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-gpu-results
+          path: results/macos-gpu-test.json
+          retention-days: 7
+
+      - name: Commit & Push Results
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main || true
+          git add results/
+          if ! git diff --staged --quiet; then
+            git commit -m "docs: add macos gpu test results [skip ci]"
+            git push origin main
+          else
+            echo "No new results to commit"
+          fi
