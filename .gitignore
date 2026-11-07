@@ -17,3 +17,7 @@ world_nether/
 world_the_end/
 logs/
 *.log
+
+# Local Android client build & APK artifacts (published via GitHub Releases)
+moonlight-android/
+*.apk
