@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-07T09:14:52Z",
+  "timestamp": "2026-11-07T09:16:34Z",
   "os_info": {
     "system": "Darwin",
     "release": "25.6.0",
@@ -7,13 +7,37 @@
     "machine": "arm64",
     "processor": "arm"
   },
-  "system_profiler_hardware": "Hardware:\n\n    Hardware Overview:\n\n      Model Name: Apple Virtual Machine 1\n      Model Identifier: VirtualMac2,1\n      Model Number: VM0001LL/A\n      Chip: Apple M1 (Virtual)\n      Total Number of Cores: 3\n      Memory: 7 GB\n      System Firmware Version: 20457.41.3\n      OS Loader Version: 18000.161.10.702.4\n      Serial Number (system): ZHRJ4659RX\n      Hardware UUID: 8DBF21A6-4AC6-52E4-A8D5-686425A02B3D\n      Provisioning UDID: 3000193e9f972f862c9ff616dcec95c95cdf701c\n      Activation Lock Status: Disabled",
-  "system_profiler_displays": "",
-  "metal_results": {},
+  "system_profiler_hardware": "Hardware:\n\n    Hardware Overview:\n\n      Model Name: Apple Virtual Machine 1\n      Model Identifier: VirtualMac2,1\n      Model Number: VM0001LL/A\n      Chip: Apple M2 Pro (Virtual)\n      Total Number of Cores: 5\n      Memory: 14 GB\n      System Firmware Version: 20457.41.3\n      OS Loader Version: 18000.161.10.702.4\n      Serial Number (system): ZHRJ4659RX\n      Hardware UUID: 8DBF21A6-4AC6-52E4-A8D5-686425A02B3D\n      Provisioning UDID: cb391a353d418ec95991f51647b6604a9d9a4907\n      Activation Lock Status: Disabled",
+  "system_profiler_displays": "None (Headless VM)",
+  "metal_results": {
+    "computeGFLOPS": 644.1914976673941,
+    "gemmTFLOPS": 3.408573944206884,
+    "supportsApple7": false,
+    "supportsMetal3": false,
+    "supportsRaytracing": false,
+    "isLowPower": false,
+    "gemm2048LatencyMs": 5.040192604064941,
+    "metalDevicesFound": 1,
+    "vectorAddLatencyMs": 1.210188865661621,
+    "isHeadless": false,
+    "vectorAddSuccess": true,
+    "computeStressLatencyMs": 6.209333737691243,
+    "hasUnifiedMemory": true,
+    "vectorAddBandwidthGBs": 92.34815500699384,
+    "maxBufferLengthMB": 7168,
+    "mpsSupported": true,
+    "defaultDeviceName": "Apple Paravirtual device",
+    "timestamp": "2026-11-07T09:16:40Z",
+    "supportsApple8": false,
+    "recommendedMaxWorkingSetMB": 9557.34375,
+    "isRemovable": false
+  },
   "pytorch_mps": {
     "torch_version": "2.15.0",
     "mps_built": true,
     "mps_available": false,
     "success": false
-  }
+  },
+  "iokit_accelerator": "|   \"IOClass\" = \"AppleParavirtGPU\"\n  |   \"IOProviderClass\" = \"AppleARMIODevice\"\n  |   \"CFBundleIdentifierKernel\" = \"com.apple.driver.AppleParavirtGPUIOGPUFamily\"\n  |   \"CFBundleIdentifier\" = \"com.apple.driver.AppleParavirtGPUIOGPUFamily\"",
+  "paravirtual_devices": "|   \"IOKitDiagnostics\" = {\"Instance allocation\"=2944904,\"Container allocation\"=3055461,\"Pageable allocation\"=116621456,\"Classes\"={\"IosaWdmaControlMSR11\"=0,\"IORSMReceiveQueue\"=0,\"AppleARMFunctionChargerMux\"=0,\"AppleDisplay\"=0,\"AppleVirtIONetworkTransaction\"=277,\"IOSharedInterruptController\"=0,\"M2ScalerScalingControlMSR8\"=0,\"IOAppleLabelScheme\"=0,\"IOUSBMassStorageCBIDriverNub\"=0,\"TSNBSDTestInterface\"=0,\"AppleVirtIOSocketEventTransaction\"=8,\"IOGPUSharedEventFence\"=0,\"AppleBacklightDisplay\"=0,\"AppleVirtIOSoundControlTransaction\"=0,\"RTBuddyARG\"=0,\"AppleSEPLogger\"=0,\"IOTimeSyncTimeLineFilterIIR\"=0,\"IONotifier\"=3,\"IOReportLegend\"=0,\"AppleARMFunctionSlowAdaptiveClockingAggressor\"=0,\"AppleARMFunctionUSBDataMonitor\"=0,\"IOTimeSyncTimeLineFilter128\"=0,\"AppleSMC\"=0,\"AppleVirtualPlatformHIDCopyMatchingEventTransaction\"=0,\"IosaDPEControlMSR10\"=0,\"IOSkywalkStatisticsReporter\"=0,\"AppleARMPerformanceControllerFunctionCPUIdle\"=0,\"IOAccessoryPortIDBus\"=0,\"IOUserEthernetResource\"=1,\"AppleARMSPMIController\""
 }

@@ -1,0 +1,23 @@
+{
+  "computeGFLOPS" : 644.1914976673941,
+  "gemmTFLOPS" : 3.408573944206884,
+  "supportsApple7" : false,
+  "supportsMetal3" : false,
+  "supportsRaytracing" : false,
+  "isLowPower" : false,
+  "gemm2048LatencyMs" : 5.040192604064941,
+  "metalDevicesFound" : 1,
+  "vectorAddLatencyMs" : 1.210188865661621,
+  "isHeadless" : false,
+  "vectorAddSuccess" : true,
+  "computeStressLatencyMs" : 6.209333737691243,
+  "hasUnifiedMemory" : true,
+  "vectorAddBandwidthGBs" : 92.34815500699384,
+  "maxBufferLengthMB" : 7168,
+  "mpsSupported" : true,
+  "defaultDeviceName" : "Apple Paravirtual device",
+  "timestamp" : "2026-11-07T09:16:40Z",
+  "supportsApple8" : false,
+  "recommendedMaxWorkingSetMB" : 9557.34375,
+  "isRemovable" : false
+}
