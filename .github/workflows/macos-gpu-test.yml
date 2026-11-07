@@ -1,19 +1,20 @@
-name: macOS Runner GPU Test & Benchmark
+name: macOS Full Benchmark - CPU, Disk IOPS & GPU 3D Render
 
 on:
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/macos-gpu-test.yml'
+      - 'scripts/gpu_3d_render.swift'
       - 'scripts/gpu_test.swift'
-      - 'scripts/gpu_benchmark.py'
+      - 'scripts/comprehensive_benchmark.py'
 
 permissions:
   contents: write
 
 jobs:
-  gpu-test:
-    name: Test GPU on macOS Runner
+  benchmark-all:
+    name: Full System Benchmark (CPU, Disk IOPS, GPU 3D Render)
     runs-on: macos-latest
     steps:
       - name: Checkout Code
@@ -24,20 +25,20 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install PyTorch
+      - name: Install Benchmark Dependencies
         run: |
-          pip install torch --extra-index-url https://download.pytorch.org/whl/cpu || pip install torch || true
+          brew install fio sysbench
 
-      - name: Run GPU Diagnostic & Benchmark
+      - name: Run Comprehensive Benchmarks
         run: |
-          chmod +x scripts/gpu_benchmark.py
-          python3 scripts/gpu_benchmark.py
+          chmod +x scripts/comprehensive_benchmark.py
+          python3 scripts/comprehensive_benchmark.py
 
-      - name: Upload Results Artifact
+      - name: Upload Benchmark Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-gpu-results
-          path: results/macos-gpu-test.json
+          name: macos-full-benchmark-results
+          path: results/
           retention-days: 7
 
       - name: Commit & Push Results
@@ -47,7 +48,7 @@ jobs:
           git pull --rebase origin main || true
           git add results/
           if ! git diff --staged --quiet; then
-            git commit -m "docs: add macos gpu test results [skip ci]"
+            git commit -m "docs: record full cpu, disk iops and gpu 3d render benchmark [skip ci]"
             git push origin main
           else
             echo "No new results to commit"
