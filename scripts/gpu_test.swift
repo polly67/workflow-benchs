@@ -217,7 +217,7 @@ do {
     print(String(format: "  Effective GPU Bandwidth: %.2f GB/s", bandwidthGBs))
 
     // Benchmark 2: Compute Heavy Kernel
-    let computeElements: UInt32 = 1_000_000
+    var computeElements: UInt32 = 1_000_000
     var iterations: UInt32 = 200
     let computeBufSize = Int(computeElements) * MemoryLayout<Float>.stride
     guard let heavyInBuf = device.makeBuffer(length: computeBufSize, options: .storageModeShared),
@@ -304,7 +304,7 @@ do {
     report.error = "\(error)"
 }
 
-FileManager.default.createDirectory(atPath: "results", withIntermediateDirectories: true)
+try? FileManager.default.createDirectory(atPath: "results", withIntermediateDirectories: true)
 let encoder = JSONEncoder()
 encoder.outputFormatting = .prettyPrinted
 if let data = try? encoder.encode(report) {

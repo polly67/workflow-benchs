@@ -43,13 +43,29 @@ def main():
         print(f"Error querying hardware: {err}")
 
     # 2. Displays / Graphics Profiler
-    print("\n--- 2. Querying SPDisplaysDataType ---")
+    print("\n--- 2. Querying SPDisplaysDataType & IOKit Graphics ---")
     code, out, err = run_cmd("system_profiler SPDisplaysDataType")
-    if code == 0:
+    if code == 0 and out.strip():
         print(out)
         results["system_profiler_displays"] = out
     else:
-        print(f"Error querying displays: {err}")
+        print("SPDisplaysDataType returned empty or unpopulated (headless environment).")
+        results["system_profiler_displays"] = "None (Headless VM)"
+
+    # Check IOKit Accelerators / Paravirtual Graphics
+    print("\n--- 2b. Querying IOKit IOAccelerator & Graphics Devices ---")
+    _, ioreg_acc, _ = run_cmd("ioreg -l -r -c IOAccelerator | grep -E 'CFBundleIdentifier|model|device-id|IOClass|IOProviderClass'")
+    if ioreg_acc:
+        print(f"IOAccelerator:\n{ioreg_acc}")
+        results["iokit_accelerator"] = ioreg_acc
+    else:
+        print("No IOAccelerator found in IOKit registry.")
+        results["iokit_accelerator"] = "Not found"
+
+    _, ioreg_para, _ = run_cmd("ioreg -l | grep -i paravirtual")
+    if ioreg_para:
+        print(f"Paravirtual Graphics matches:\n{ioreg_para[:1000]}")
+        results["paravirtual_devices"] = ioreg_para[:1000]
 
     # 3. Swift Metal Test
     print("\n--- 3. Running Swift Metal Benchmark ---")
