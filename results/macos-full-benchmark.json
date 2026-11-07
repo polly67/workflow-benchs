@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-11-07T09:21:44Z",
+  "os": "macOS-26.6.2-arm64-arm-64bit",
+  "cpu_count": 3,
+  "cpu": {
+    "single_thread_eps": 8481038.81,
+    "single_thread_lat_ms": 0.0,
+    "multi_thread_eps": 24696685.0,
+    "multi_thread_lat_ms": 0.0,
+    "memory_read_mib_sec": 41737.32,
+    "memory_write_mib_sec": 49849.32
+  },
+  "sha256": {
+    "sha256_mb_per_sec": 1977.48,
+    "time_sec": 0.0506
+  },
+  "disk_iops": {
+    "randread_4k_iops": 52071.991001,
+    "randread_4k_bw_mb_s": 203.41,
+    "randread_4k_lat_ms": 0.278,
+    "randwrite_4k_iops": 22952.505937,
+    "randwrite_4k_bw_mb_s": 89.66,
+    "randwrite_4k_lat_ms": 0.647,
+    "seqread_1m_bw_mb_s": 9287.21,
+    "seqread_1m_iops": 9287.214098,
+    "seqwrite_1m_bw_mb_s": 7709.41,
+    "seqwrite_1m_iops": 7709.411324,
+    "mixed_4k_read_iops": 17380.07749,
+    "mixed_4k_write_iops": 17408.198975,
+    "mixed_4k_total_iops": 34788.28
+  },
+  "gpu_compute": {
+    "isLowPower": false,
+    "maxBufferLengthMB": 3584,
+    "supportsMetal3": false,
+    "supportsApple7": false,
+    "mpsSupported": true,
+    "timestamp": "2026-11-07T09:22:58Z",
+    "hasUnifiedMemory": true,
+    "gemm2048LatencyMs": 12.532591819763184,
+    "supportsApple8": false,
+    "computeGFLOPS": 559.3337556259377,
+    "defaultDeviceName": "Apple Paravirtual device",
+    "computeStressLatencyMs": 7.151365280151367,
+    "supportsRaytracing": false,
+    "vectorAddLatencyMs": 2.5523900985717773,
+    "vectorAddBandwidthGBs": 43.785904441642145,
+    "gemmTFLOPS": 1.370815345386764,
+    "metalDevicesFound": 1,
+    "vectorAddSuccess": true,
+    "recommendedMaxWorkingSetMB": 4778.671875,
+    "isHeadless": false,
+    "isRemovable": false
+  },
+  "gpu_3d_render": {
+    "framesRendered": 300,
+    "totalElapsedSec": 0.3038029670715332,
+    "trianglesPerSecond": 3159942.8052128246,
+    "averageFps": 987.4821266290077,
+    "totalTrianglesPerFrame": 3200,
+    "renderHeight": 1080,
+    "deviceName": "Apple Paravirtual device",
+    "frameLatencyMs": 1.0126765569051106,
+    "renderWidth": 1920,
+    "rasterizationVerified": true
+  }
+}

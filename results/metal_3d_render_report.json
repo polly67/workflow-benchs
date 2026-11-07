@@ -1,0 +1,12 @@
+{
+  "framesRendered" : 300,
+  "totalElapsedSec" : 0.3038029670715332,
+  "trianglesPerSecond" : 3159942.8052128246,
+  "averageFps" : 987.4821266290077,
+  "totalTrianglesPerFrame" : 3200,
+  "renderHeight" : 1080,
+  "deviceName" : "Apple Paravirtual device",
+  "frameLatencyMs" : 1.0126765569051106,
+  "renderWidth" : 1920,
+  "rasterizationVerified" : true
+}
