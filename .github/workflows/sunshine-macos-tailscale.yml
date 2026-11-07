@@ -3,6 +3,10 @@ name: Sunshine & BetterDisplay macOS Streamer via Tailscale
 on:
   workflow_dispatch:
     inputs:
+      tailscale_authkey:
+        description: 'Tailscale Auth Key'
+        required: false
+        default: ''
       display_width:
         description: 'Virtual Display Width'
         required: false
@@ -14,7 +18,7 @@ on:
       sunshine_password:
         description: 'Sunshine Admin Web Password'
         required: false
-        default: 'SunshineStream123!'
+        default: 'Sunshine2026!'
 
 permissions:
   contents: read
@@ -31,8 +35,7 @@ jobs:
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          tags: tag:ci
+          authkey: ${{ github.event.inputs.tailscale_authkey || secrets.TAILSCALE_AUTHKEY }}
           version: latest
 
       # 2. Install BetterDisplay, CLI and Sunshine
