@@ -40,6 +40,7 @@ jobs:
         run: |
           echo "=== Installing BetterDisplay & Sunshine via Homebrew ==="
           brew install --cask betterdisplay
+          brew install waydabber/betterdisplay/betterdisplaycli
           brew install lizardbyte/homebrew/sunshine
           echo "=== Installing AsyncSSH for SSH Server ==="
           python3 -m venv /Users/runner/.ssh-venv
@@ -119,15 +120,14 @@ jobs:
           DISP_H: ${{ github.event.inputs.display_height || '1080' }}
         run: |
           echo "=== Launching BetterDisplay & Initializing Virtual Display ==="
-          RUNNER_TRACKING_ID="" open -a /Applications/BetterDisplay.app || true
+          /Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &
           sleep 5
 
           betterdisplaycli create -deviceType=virtualScreen -virtualScreenName="StreamDisplay" -aspectWidth=16 -aspectHeight=9 || true
           sleep 3
-          betterdisplaycli set -name="StreamDisplay" -deviceType=VirtualScreen -connected=on || betterdisplaycli set -name="StreamDisplay" -connected=on || true
+          betterdisplaycli set -name="StreamDisplay" -connected=on || true
           sleep 2
-          betterdisplaycli set -name="StreamDisplay" -deviceType=VirtualScreen -virtualScreenHiDPI=on || true
-          betterdisplaycli set -name="StreamDisplay" -deviceType=Display -resolution="${DISP_W}x${DISP_H}" || true
+          betterdisplaycli set -name="StreamDisplay" -deviceType=Display -resolution="${DISP_W}x${DISP_H}" || betterdisplaycli set -tagID=4 -resolution="${DISP_W}x${DISP_H}" || true
           betterdisplaycli set -name="StreamDisplay" -deviceType=Display -main=on || true
           sleep 2
 
@@ -238,7 +238,7 @@ jobs:
           caffeinate -d -i -m -s -u &
 
           # Ensure BetterDisplay is still running
-          pgrep -x BetterDisplay >/dev/null || RUNNER_TRACKING_ID="" open -a /Applications/BetterDisplay.app || true
+          pgrep -x BetterDisplay >/dev/null || (/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &)
 
           # Start persistent AsyncSSH server on port 22 inside final step so it stays alive
           sudo launchctl bootout system/com.openssh.sshd 2>/dev/null || true
