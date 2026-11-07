@@ -396,6 +396,9 @@ jobs:
           # Ensure BetterDisplay is still running
           pgrep -x BetterDisplay >/dev/null || (/Applications/BetterDisplay.app/Contents/MacOS/BetterDisplay >/tmp/betterdisplay.log 2>&1 </dev/null &)
 
+          # Pre-open Screen Recording settings pane in case macOS TCC requires one-time approval via VNC
+          open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture" 2>/dev/null || true
+
           # Start persistent AsyncSSH server on port 22 inside final step so it stays alive
           LOCAL_USER=$(id -un)
           sudo launchctl bootout system/com.openssh.sshd 2>/dev/null || true
