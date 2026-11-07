@@ -49,8 +49,12 @@ jobs:
           cat /tmp/geo.json
           echo ""
           echo "=== Installing BetterDisplay, DisplayPlacer & Sunshine via Homebrew ==="
+          export HOMEBREW_NO_INSTALL_CLEANUP=1
+          export HOMEBREW_NO_AUTO_UPDATE=1
           brew install --cask betterdisplay
+          rm -f /opt/homebrew/bin/betterdisplaycli
           brew install waydabber/betterdisplay/betterdisplaycli displayplacer
+          brew link --overwrite betterdisplaycli || true
           brew install lizardbyte/homebrew/sunshine
           echo "=== Installing AsyncSSH for SSH Server ==="
           python3 -m venv "$HOME/.ssh-venv"
