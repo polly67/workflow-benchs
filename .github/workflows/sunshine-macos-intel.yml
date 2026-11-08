@@ -200,7 +200,7 @@ jobs:
           min_threads = 2
           EOF
 
-          # Pre-seed user credentials and pre-pair Moonlight device 'Jelgb'
+          # Pre-seed user credentials with clean client list to prevent stale certificate mismatch
           cat << 'EOF' > ~/.config/sunshine/sunshine_state.json
           {
               "username": "runner",
@@ -208,14 +208,7 @@ jobs:
               "password": "7ECCE333FE241D00AFB6FD25CC5A6550F9970ED9F3F48C2B120264070C225FE4",
               "root": {
                   "uniqueid": "D1018438-3EDA-B60F-1988-D2BDE703AC18",
-                  "named_devices": [
-                      {
-                          "name": "Jelgb",
-                          "cert": "-----BEGIN CERTIFICATE-----\nMIICxjCCAa6gAwIBAgIIZ1BJLmOv7EIwDQYJKoZIhvcNAQELBQAwIzEhMB8GA1UE\nAwwYTlZJRElBIEdhbWVTdHJlYW0gQ2xpZW50MB4XDTI2MTEwNzE4NTM1NloXDTQ2\nMTEwNzE4NTM1NlowIzEhMB8GA1UEAwwYTlZJRElBIEdhbWVTdHJlYW0gQ2xpZW50\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqlKX4xlt8rk6vJZTCUS4\nod+L0LY7l96BBQi0JzTDhmaMr9aDaHx2r2Nep7pmLd6zbh496dcc12rTIRZVrWqZ\nk6Bx8v04Ho1MFhWKbAlekJ2O+JEPtJ+MRU7OMyW2dBXEjJjp2Sll0OeU92SKeyTU\nIxdqoaycvhbJkUXWWTeBhC4I109hP+TVyHRAu\/M\/jrxrigGTqSz9Mft4p4d0hxwz\nw0nFL1gI9AULVqyGuknBUsVtn5rI\/9h2nMscrzsIpzCdqczITDvWk6b0Q+SBdiRk\nsO9zlTBRHV94rTHiR9MxvRuCn3I9XZzRLc\/KqkTxeauUsHMsFFKd8q5YkAOvs6Ad\nMwIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQBl7Sj+uTkLNj2F8ao\/EPWOie6b8m4Z\naKf2hDCe2gnG\/\/nf6pHfcRnFxPBoxQGhLINUCul1Y6loYWghYgls9OCmOb+jNPbp\nESU03L\/Me5vwNT9DyujMhI7HznTeYmYWXMBfXL6hhll\/fp8xVGN8VuT2g4paUYYk\nwQ77fDtkTtQW03yDjkn3+J1jzXIwsnbr7v340W1oeWGPY1\/WusFG+ZX7WxEwfSMd\n2jRC1dJIGDCOYgoz8FEWZbX5nEIbZE2+ht99Z380gr+kSxIKqKNsiH7h0t3jIDHr\n6pcnHOaeMG4cpjm4OssVWrsa3hzp4DcjLq\/jFDMtZMkTbAnOv\/T3zZiS\n-----END CERTIFICATE-----\n",
-                          "uuid": "5FC1CA75-8903-B806-B78A-0E19F689A6E9",
-                          "enabled": "true"
-                      }
-                  ]
+                  "named_devices": []
               }
           }
           EOF
@@ -236,7 +229,7 @@ jobs:
               "sunshine_web_ui": f"https://{ip4}:47990",
               "sunshine_web_ui_fqdn": f"https://{fqdn}:47990" if fqdn else "",
               "username": user,
-              "moonlight_paired_device": "Jelgb"
+              "pairing_status": "Ready for clean 4-digit PIN pairing"
           }, indent=2))
           PYEOF
           cat /tmp/conn-info/connection-info.json
@@ -250,7 +243,7 @@ jobs:
             echo "| **Tailscale FQDN** | \`$TS_FQDN\` |"
             echo "| **SSH Command** | \`ssh ${SUN_USER}@${TS_IP}\` (password: \`${SUN_PASS}\`) |"
             echo "| **Sunshine Web UI** | [https://${TS_IP}:47990](https://${TS_IP}:47990) |"
-            echo "| **Moonlight Device** | \`Jelgb\` (Pre-paired) |"
+            echo "| **Pairing Status** | Ready (PIN tab at Web UI) |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Connection Info
