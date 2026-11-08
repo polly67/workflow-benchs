@@ -1,0 +1,275 @@
+name: Sunshine & SSH on macOS Intel (x86_64) via Tailscale
+
+on:
+  workflow_dispatch:
+    inputs:
+      display_width:
+        description: 'Display Width'
+        required: false
+        default: '1920'
+      display_height:
+        description: 'Display Height'
+        required: false
+        default: '1080'
+      sunshine_user:
+        description: 'SSH & Sunshine Username'
+        required: false
+        default: 'runner'
+      sunshine_password:
+        description: 'SSH & Sunshine Password'
+        required: false
+        default: 'root'
+  push:
+    paths:
+      - '.github/workflows/sunshine-macos-intel.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sunshine-intel:
+    name: Sunshine & SSH on macOS Intel (x86_64)
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: System Hardware Overview
+        run: |
+          echo "=========================================================="
+          echo "🍏 macOS Intel Runner Hardware"
+          echo "=========================================================="
+          sw_vers
+          uname -a
+          echo "Architecture: $(arch)"
+          echo "CPU: $(sysctl -n machdep.cpu.brand_string)"
+          echo "Cores: $(sysctl -n hw.ncpu)"
+          echo "RAM: $(( $(sysctl -n hw.memsize) / 1024 / 1024 / 1024 )) GB"
+          echo "Public IP / Geo:"
+          curl -s --max-time 5 https://ipinfo.io/json || true
+
+      - name: Install Sunshine, AsyncSSH & DisplayPlacer
+        run: |
+          echo "=== Downloading Sunshine x86_64 Release DMG ==="
+          curl -s -L https://github.com/LizardByte/Sunshine/releases/download/v2026.914.233613/Sunshine-macOS-x86_64.dmg -o /tmp/sunshine.dmg
+          hdiutil attach /tmp/sunshine.dmg -nobrowse -mountpoint /Volumes/sunshine_dmg
+          sudo cp -R /Volumes/sunshine_dmg/Sunshine.app /Applications/Sunshine.app
+          hdiutil detach /Volumes/sunshine_dmg
+          rm -f /tmp/sunshine.dmg
+
+          sudo mkdir -p /opt/homebrew/bin
+          sudo ln -sf /Applications/Sunshine.app/Contents/MacOS/Sunshine /opt/homebrew/bin/sunshine
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+
+          echo "=== Installing displayplacer via Homebrew ==="
+          brew install displayplacer || true
+
+          echo "=== Setting up AsyncSSH Python environment ==="
+          python3 -m venv "$HOME/.ssh-venv"
+          "$HOME/.ssh-venv/bin/pip" install --upgrade pip asyncssh
+
+      - name: Configure macOS TCC Permissions (Screen Capture & Accessibility)
+        run: |
+          echo "=== Granting TCC Permissions for Sunshine ==="
+          sudo python3 - << 'PYEOF'
+          import os, sqlite3, subprocess, time
+
+          db_paths = [
+              "/Library/Application Support/com.apple.TCC/TCC.db",
+              os.path.expanduser("~/Library/Application Support/com.apple.TCC/TCC.db")
+          ]
+
+          # Extract code requirement for Sunshine.app
+          csreq_blob = None
+          try:
+              cs_out = subprocess.check_output(["codesign", "-d", "-r-", "/Applications/Sunshine.app"], stderr=subprocess.STDOUT)
+              # csreq from codesign output
+              with open("/tmp/cs_out.txt", "wb") as f:
+                  f.write(cs_out)
+          except Exception as e:
+              print("Codesign note:", e)
+
+          services = [
+              "kTCCServiceScreenCapture",
+              "kTCCServiceAccessibility",
+              "kTCCServicePostEvent",
+              "kTCCServiceListenEvent"
+          ]
+
+          for p in db_paths:
+              if not os.path.exists(p):
+                  continue
+              try:
+                  conn = sqlite3.connect(p)
+                  cur = conn.cursor()
+                  for svc in services:
+                      cur.execute("""
+                          INSERT OR REPLACE INTO access 
+                          (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier, flags, last_modified)
+                          VALUES (?, 'dev.lizardbyte.app.Sunshine', 0, 2, 1, 1, NULL, 'UNUSED', 0, ?)
+                      """, (svc, int(time.time())))
+                      cur.execute("""
+                          INSERT OR REPLACE INTO access 
+                          (service, client, client_type, auth_value, auth_reason, auth_version, csreq, indirect_object_identifier, flags, last_modified)
+                          VALUES (?, '/Applications/Sunshine.app/Contents/MacOS/Sunshine', 1, 2, 1, 1, NULL, 'UNUSED', 0, ?)
+                      """, (svc, int(time.time())))
+                  conn.commit()
+                  conn.close()
+                  print(f"✅ Updated TCC permissions in {p}")
+              except Exception as e:
+                  print(f"Error updating {p}: {e}")
+          PYEOF
+
+          sudo pkill -9 tccd 2>/dev/null || true
+          pkill -9 tccd 2>/dev/null || true
+
+      - name: Configure Display Resolution
+        env:
+          DISP_W: ${{ github.event.inputs.display_width || '1920' }}
+          DISP_H: ${{ github.event.inputs.display_height || '1080' }}
+        run: |
+          echo "=== Configuring Display Resolution (${DISP_W}x${DISP_H}) ==="
+          system_profiler SPDisplaysDataType || true
+          displayplacer list || true
+          # If resolution differs, attempt to set
+          displayplacer "id:1 res:${DISP_W}x${DISP_H} origin:(0,0) degree:0" 2>/dev/null || true
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          version: latest
+          args: --hostname=mac-intel-runner --accept-routes
+
+      - name: Configure Sunshine & Pre-pair Moonlight Client
+        env:
+          SUN_USER: ${{ github.event.inputs.sunshine_user || 'runner' }}
+          SUN_PASS: ${{ github.event.inputs.sunshine_password || 'root' }}
+        run: |
+          # Keep public DNS active
+          sudo tailscale set --accept-dns=false 2>/dev/null || true
+          networksetup -listallnetworkservices | tail -n +2 | sed 's/^\*//' | while IFS= read -r svc; do
+            if [ -n "$svc" ]; then
+              sudo networksetup -setdnsservers "$svc" 1.1.1.1 8.8.8.8 100.100.100.100 2>/dev/null || true
+            fi
+          done
+          sudo dscacheutil -flushcache 2>/dev/null || true
+          sudo killall -HUP mDNSResponder 2>/dev/null || true
+
+          mkdir -p ~/.config/sunshine
+
+          TS_IP=$(tailscale ip -4 | head -n1 | tr -d '[:space:]')
+          TS_IPV6=$(tailscale ip -6 2>/dev/null | head -n1 | tr -d '[:space:]' || true)
+          TS_JSON=$(tailscale status --json)
+          TS_FQDN=$(python3 -c 'import sys,json; d=json.loads(sys.argv[1]); print(d.get("Self",{}).get("DNSName","").rstrip("."))' "$TS_JSON")
+          TS_HOST=$(python3 -c 'import sys,json; d=json.loads(sys.argv[1]); print(d.get("Self",{}).get("HostName",""))' "$TS_JSON")
+
+          ORIGINS=$(python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" << 'PYEOF'
+          import sys
+          ip4, ip6, fqdn, host = sys.argv[1:5]
+          hosts = []
+          for h in [ip4, f"[{ip6}]" if ip6 else "", fqdn, fqdn.lower(), host, host.lower(), "localhost", "127.0.0.1"]:
+              if h and h not in hosts:
+                  hosts.append(h)
+          origins = []
+          for h in hosts:
+              origins.append(f"https://{h}:47990")
+              origins.append(f"https://{h}")
+          print(",".join(origins))
+          PYEOF
+          )
+
+          cat << EOF > ~/.config/sunshine/sunshine.conf
+          sunshine_name = macOS-Intel-Runner
+          address_family = both
+          origin_web_ui_allowed = wan
+          csrf_allowed_origins = $ORIGINS
+          output_name = 1
+          system_tray = disabled
+          encoder = videotoolbox
+          vt_coder = cavlc
+          vt_realtime = enabled
+          vt_software = auto
+          fec_percentage = 5
+          qp = 26
+          min_threads = 2
+          EOF
+
+          # Pre-seed user credentials and pre-pair Moonlight device 'Jelgb'
+          cat << 'EOF' > ~/.config/sunshine/sunshine_state.json
+          {
+              "username": "runner",
+              "salt": "ziaa-PT7u(gWSMDV",
+              "password": "7ECCE333FE241D00AFB6FD25CC5A6550F9970ED9F3F48C2B120264070C225FE4",
+              "root": {
+                  "uniqueid": "D1018438-3EDA-B60F-1988-D2BDE703AC18",
+                  "named_devices": [
+                      {
+                          "name": "Jelgb",
+                          "cert": "-----BEGIN CERTIFICATE-----\nMIICxjCCAa6gAwIBAgIIZ1BJLmOv7EIwDQYJKoZIhvcNAQELBQAwIzEhMB8GA1UE\nAwwYTlZJRElBIEdhbWVTdHJlYW0gQ2xpZW50MB4XDTI2MTEwNzE4NTM1NloXDTQ2\nMTEwNzE4NTM1NlowIzEhMB8GA1UEAwwYTlZJRElBIEdhbWVTdHJlYW0gQ2xpZW50\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqlKX4xlt8rk6vJZTCUS4\nod+L0LY7l96BBQi0JzTDhmaMr9aDaHx2r2Nep7pmLd6zbh496dcc12rTIRZVrWqZ\nk6Bx8v04Ho1MFhWKbAlekJ2O+JEPtJ+MRU7OMyW2dBXEjJjp2Sll0OeU92SKeyTU\nIxdqoaycvhbJkUXWWTeBhC4I109hP+TVyHRAu\/M\/jrxrigGTqSz9Mft4p4d0hxwz\nw0nFL1gI9AULVqyGuknBUsVtn5rI\/9h2nMscrzsIpzCdqczITDvWk6b0Q+SBdiRk\nsO9zlTBRHV94rTHiR9MxvRuCn3I9XZzRLc\/KqkTxeauUsHMsFFKd8q5YkAOvs6Ad\nMwIDAQABMA0GCSqGSIb3DQEBCwUAA4IBAQBl7Sj+uTkLNj2F8ao\/EPWOie6b8m4Z\naKf2hDCe2gnG\/\/nf6pHfcRnFxPBoxQGhLINUCul1Y6loYWghYgls9OCmOb+jNPbp\nESU03L\/Me5vwNT9DyujMhI7HznTeYmYWXMBfXL6hhll\/fp8xVGN8VuT2g4paUYYk\nwQ77fDtkTtQW03yDjkn3+J1jzXIwsnbr7v340W1oeWGPY1\/WusFG+ZX7WxEwfSMd\n2jRC1dJIGDCOYgoz8FEWZbX5nEIbZE2+ht99Z380gr+kSxIKqKNsiH7h0t3jIDHr\n6pcnHOaeMG4cpjm4OssVWrsa3hzp4DcjLq\/jFDMtZMkTbAnOv\/T3zZiS\n-----END CERTIFICATE-----\n",
+                          "uuid": "5FC1CA75-8903-B806-B78A-0E19F689A6E9",
+                          "enabled": "true"
+                      }
+                  ]
+              }
+          }
+          EOF
+
+          echo "=== Sunshine Config & State Verified ==="
+          cat ~/.config/sunshine/sunshine.conf
+
+      - name: Start SSH Server & Launch Sunshine Streamer
+        env:
+          SUN_USER: ${{ github.event.inputs.sunshine_user || 'runner' }}
+          SUN_PASS: ${{ github.event.inputs.sunshine_password || 'root' }}
+        run: |
+          # Prevent sleep
+          caffeinate -d -i -m -s -u &
+
+          # Start AsyncSSH on port 22
+          LOCAL_USER=$(id -un)
+          sudo launchctl bootout system/com.openssh.sshd 2>/dev/null || true
+          sudo pkill -f "scripts/ssh_server.py" 2>/dev/null || true
+          sudo "$HOME/.ssh-venv/bin/python" scripts/ssh_server.py \
+            --port 22 \
+            --user "$SUN_USER" \
+            --password "$SUN_PASS" \
+            --run-as "$LOCAL_USER" \
+            --host-key "$HOME/.ssh_host_ed25519" > /tmp/ssh_server.log 2>&1 &
+
+          for i in {1..15}; do
+            if nc -z 127.0.0.1 22 2>/dev/null; then
+              echo "✅ SSH server listening on port 22"
+              break
+            fi
+            sleep 0.5
+          done
+
+          TS_IP=$(tailscale ip -4 | head -n1 | tr -d '[:space:]')
+          TS_FQDN=$(tailscale status --json | python3 -c 'import sys,json; d=json.loads(sys.stdin.read()); print(d.get("Self",{}).get("DNSName","").rstrip("."))')
+
+          echo "=========================================================="
+          echo "🎉 SUNSHINE & SSH LIVE ON MACOS INTEL (x86_64)!"
+          echo "=========================================================="
+          echo "Tailscale IP:       $TS_IP"
+          echo "MagicDNS FQDN:      $TS_FQDN"
+          echo "SSH Access:         ssh ${SUN_USER}@${TS_IP}  (password: ${SUN_PASS})"
+          echo "Sunshine Web UI:    https://${TS_IP}:47990"
+          echo "Sunshine Username:  ${SUN_USER}"
+          echo "Sunshine Password:  ${SUN_PASS}"
+          echo "Moonlight Device:   'Jelgb' is pre-paired and authorized!"
+          echo "=========================================================="
+
+          # Launch Sunshine via macOS open to initialize bundle and environment
+          open -a /Applications/Sunshine.app --args /Users/runner/.config/sunshine/sunshine.conf
+          sleep 4
+
+          # Supervise and stream logs
+          while true; do
+            if ! pgrep -x Sunshine >/dev/null; then
+              echo "Restarting Sunshine..."
+              open -a /Applications/Sunshine.app --args /Users/runner/.config/sunshine/sunshine.conf
+            fi
+            tail -n 25 ~/.config/sunshine/sunshine.log 2>/dev/null || true
+            sleep 10
+          done
