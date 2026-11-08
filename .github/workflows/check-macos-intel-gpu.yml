@@ -1,4 +1,4 @@
-name: Check macOS Intel Runner GPU
+name: Check macOS Intel Runner GPU & Hypervisor
 
 on:
   workflow_dispatch:
@@ -7,13 +7,9 @@ on:
       - '.github/workflows/check-macos-intel-gpu.yml'
 
 jobs:
-  probe-intel-gpu:
-    name: Probe GPU on ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-15-intel, macos-13]
-    runs-on: ${{ matrix.runner }}
+  probe-intel:
+    name: Probe GPU & Hypervisor on macOS Intel
+    runs-on: macos-15-intel
     steps:
       - name: System & CPU Information
         run: |
@@ -27,30 +23,53 @@ jobs:
           echo "Core count: $(sysctl -n hw.ncpu 2>/dev/null || echo 'N/A')"
           echo "Memory: $(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 / 1024 / 1024 )) GB"
 
-      - name: Query system_profiler Graphics & Displays
+      - name: Probe Hypervisor & Hardware Virtualization Support
         run: |
           echo "============================================="
-          echo "🖥️ system_profiler SPDisplaysDataType"
+          echo "🛡️ Hypervisor Support Checks"
           echo "============================================="
-          system_profiler SPDisplaysDataType || true
+          echo -n "kern.hv_support: "
+          sysctl -n kern.hv_support || echo "kern.hv_support not found"
 
-          echo "============================================="
-          echo "🖥️ system_profiler SPPCIDataType"
-          echo "============================================="
-          system_profiler SPPCIDataType || true
+          echo -n "CPU Virtualization (VMX flag): "
+          if sysctl -n machdep.cpu.features | grep -q -w "VMX"; then
+            echo "YES (VMX flag present in CPU features)"
+          else
+            echo "NO (VMX flag not exposed to guest VM)"
+          fi
 
-      - name: Query IOKit Registry for GPU & Accelerators
-        run: |
-          echo "============================================="
-          echo "🔍 IOKit IOAccelerator & IOGPU Devices"
-          echo "============================================="
-          ioreg -l -r -c IOAccelerator || echo "No IOAccelerator found."
-          ioreg -l -r -c IOGPU || echo "No IOGPU found."
+          echo "machdep.cpu.features:"
+          sysctl -n machdep.cpu.features | tr ' ' '\n' | grep -E 'VMX|EPT|EST|SMX|HYPERVISOR' || echo "No virt features found"
 
-          echo "============================================="
-          echo "🔍 PCI Devices Matching Display / VGA / 3D"
-          echo "============================================="
-          ioreg -p IOPCI -l | grep -iE 'class-code|model|device-id|vendor-id|IOName' | head -n 40 || true
+          echo "machdep.cpu.leaf7_features:"
+          sysctl -n machdep.cpu.leaf7_features 2>/dev/null || true
+
+          cat << 'EOF' > test_hv.swift
+          import Foundation
+          import Hypervisor
+          import Virtualization
+
+          print("\n--- Hypervisor.framework & Virtualization.framework Probe ---")
+          if #available(macOS 11.0, *) {
+              print("VZVirtualMachine.isSupported: \(VZVirtualMachine.isSupported)")
+          }
+
+          // Test hv_vm_create()
+          let hvStatus = hv_vm_create(hv_vm_options_t(HV_VM_DEFAULT))
+          print("hv_vm_create() return code: \(hvStatus)")
+          if hvStatus == HV_SUCCESS {
+              print("✅ Hypervisor.framework is FULLY FUNCTIONAL (hv_vm_create succeeded)!")
+              hv_vm_destroy()
+          } else if hvStatus == HV_UNSUPPORTED {
+              print("❌ Hypervisor.framework is UNSUPPORTED on this runner (HV_UNSUPPORTED).")
+          } else if hvStatus == HV_NO_DEVICE {
+              print("❌ Hypervisor.framework failed: HV_NO_DEVICE (No hardware VT-x/VMX device).")
+          } else {
+              print("⚠️ Hypervisor.framework returned code: \(hvStatus)")
+          }
+          EOF
+
+          swift test_hv.swift || true
 
       - name: Swift Metal GPU Hardware Probe
         run: |
@@ -78,32 +97,14 @@ jobs:
                   print("  Max Working Set: \(dev.recommendedMaxWorkingSetSize / 1024 / 1024) MB")
                   print("  Max Buffer Length: \(dev.maxBufferLength / 1024 / 1024) MB")
                   print("  Supports Metal 3: \(dev.supportsFamily(.metal3))")
-                  if #available(macOS 11.0, *) {
-                      print("  Supports Raytracing: \(dev.supportsRaytracing)")
-                  }
               }
           }
 
           if let defaultDevice = MTLCreateSystemDefaultDevice() {
               print("\n✅ Default Metal Device: \(defaultDevice.name)")
           } else {
-              print("\n❌ MTLCreateSystemDefaultDevice() returned nil (No Default Metal GPU).")
+              print("\n❌ MTLCreateSystemDefaultDevice() returned nil.")
           }
           EOF
 
           swift probe_metal.swift || true
-
-      - name: Python OpenGL / Graphics Probe
-        run: |
-          python3 -c "
-          import subprocess
-
-          print('=============================================')
-          print('🎮 Summary & Additional Checks')
-          print('=============================================')
-          try:
-              out = subprocess.check_output(['system_profiler', 'SPDisplaysDataType'], text=True)
-              print('SPDisplaysDataType summary:\n', out.strip() if out.strip() else 'Empty (No physical or virtual displays reported)')
-          except Exception as e:
-              print('Error running system_profiler:', e)
-          "
