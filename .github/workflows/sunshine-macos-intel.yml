@@ -3,6 +3,10 @@ name: Sunshine & SSH on macOS Intel (x86_64) via Tailscale
 on:
   workflow_dispatch:
     inputs:
+      tailscale_authkey:
+        description: 'Tailscale Auth Key (defaults to TAILSCALE_AUTHKEY secret if empty)'
+        required: false
+        default: ''
       display_width:
         description: 'Display Width'
         required: false
@@ -57,8 +61,10 @@ jobs:
           hdiutil detach /Volumes/sunshine_dmg
           rm -f /tmp/sunshine.dmg
 
-          sudo mkdir -p /opt/homebrew/bin
+          sudo mkdir -p /usr/local/bin /opt/homebrew/bin
+          sudo ln -sf /Applications/Sunshine.app/Contents/MacOS/Sunshine /usr/local/bin/sunshine
           sudo ln -sf /Applications/Sunshine.app/Contents/MacOS/Sunshine /opt/homebrew/bin/sunshine
+          echo "/usr/local/bin" >> $GITHUB_PATH
           echo "/opt/homebrew/bin" >> $GITHUB_PATH
 
           echo "=== Installing displayplacer via Homebrew ==="
@@ -137,9 +143,9 @@ jobs:
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          authkey: ${{ inputs.tailscale_authkey || secrets.TAILSCALE_AUTHKEY }}
+          hostname: mac-intel-runner
           version: latest
-          args: --hostname=mac-intel-runner --accept-routes
 
       - name: Configure Sunshine & Pre-pair Moonlight Client
         env:
@@ -184,7 +190,6 @@ jobs:
           address_family = both
           origin_web_ui_allowed = wan
           csrf_allowed_origins = $ORIGINS
-          output_name = 1
           system_tray = disabled
           encoder = videotoolbox
           vt_coder = cavlc
@@ -217,6 +222,45 @@ jobs:
 
           echo "=== Sunshine Config & State Verified ==="
           cat ~/.config/sunshine/sunshine.conf
+
+          mkdir -p /tmp/conn-info
+          python3 - "$TS_IP" "$TS_IPV6" "$TS_FQDN" "$TS_HOST" "$SUN_USER" << 'PYEOF' > /tmp/conn-info/connection-info.json
+          import json, sys
+          ip4, ip6, fqdn, host, user = sys.argv[1:6]
+          print(json.dumps({
+              "tailscale_ipv4": ip4,
+              "tailscale_ipv6": ip6,
+              "tailscale_fqdn": fqdn,
+              "tailscale_hostname": host,
+              "ssh_command": f"ssh {user}@{ip4}",
+              "sunshine_web_ui": f"https://{ip4}:47990",
+              "sunshine_web_ui_fqdn": f"https://{fqdn}:47990" if fqdn else "",
+              "username": user,
+              "moonlight_paired_device": "Jelgb"
+          }, indent=2))
+          PYEOF
+          cat /tmp/conn-info/connection-info.json
+
+          {
+            echo "### 🍏 Sunshine & SSH on macOS Intel (x86_64) Ready"
+            echo "| Service | Details |"
+            echo "| :--- | :--- |"
+            echo "| **Tailscale Hostname** | \`$TS_HOST\` |"
+            echo "| **Tailscale IPv4** | \`$TS_IP\` |"
+            echo "| **Tailscale FQDN** | \`$TS_FQDN\` |"
+            echo "| **SSH Command** | \`ssh ${SUN_USER}@${TS_IP}\` (password: \`${SUN_PASS}\`) |"
+            echo "| **Sunshine Web UI** | [https://${TS_IP}:47990](https://${TS_IP}:47990) |"
+            echo "| **Moonlight Device** | \`Jelgb\` (Pre-paired) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Connection Info
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-intel-connection-info
+          path: /tmp/conn-info/
+          retention-days: 1
 
       - name: Start SSH Server & Launch Sunshine Streamer
         env:
@@ -260,16 +304,9 @@ jobs:
           echo "Moonlight Device:   'Jelgb' is pre-paired and authorized!"
           echo "=========================================================="
 
-          # Launch Sunshine via macOS open to initialize bundle and environment
-          open -a /Applications/Sunshine.app --args /Users/runner/.config/sunshine/sunshine.conf
-          sleep 4
-
-          # Supervise and stream logs
+          echo "=== Launching Sunshine Streamer ==="
           while true; do
-            if ! pgrep -x Sunshine >/dev/null; then
-              echo "Restarting Sunshine..."
-              open -a /Applications/Sunshine.app --args /Users/runner/.config/sunshine/sunshine.conf
-            fi
-            tail -n 25 ~/.config/sunshine/sunshine.log 2>/dev/null || true
-            sleep 10
+            sunshine ~/.config/sunshine/sunshine.conf 2>&1 | tee -a ~/.config/sunshine/sunshine.log || true
+            echo "Sunshine exited — restarting in 2 seconds..."
+            sleep 2
           done
