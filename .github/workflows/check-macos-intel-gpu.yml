@@ -1,0 +1,109 @@
+name: Check macOS Intel Runner GPU
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/check-macos-intel-gpu.yml'
+
+jobs:
+  probe-intel-gpu:
+    name: Probe GPU on ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-15-intel, macos-13]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: System & CPU Information
+        run: |
+          echo "============================================="
+          echo "🍏 System & Architecture"
+          echo "============================================="
+          sw_vers
+          uname -a
+          echo "Architecture: $(arch)"
+          echo "CPU Brand: $(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'N/A')"
+          echo "Core count: $(sysctl -n hw.ncpu 2>/dev/null || echo 'N/A')"
+          echo "Memory: $(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1024 / 1024 / 1024 )) GB"
+
+      - name: Query system_profiler Graphics & Displays
+        run: |
+          echo "============================================="
+          echo "🖥️ system_profiler SPDisplaysDataType"
+          echo "============================================="
+          system_profiler SPDisplaysDataType || true
+
+          echo "============================================="
+          echo "🖥️ system_profiler SPPCIDataType"
+          echo "============================================="
+          system_profiler SPPCIDataType || true
+
+      - name: Query IOKit Registry for GPU & Accelerators
+        run: |
+          echo "============================================="
+          echo "🔍 IOKit IOAccelerator & IOGPU Devices"
+          echo "============================================="
+          ioreg -l -r -c IOAccelerator || echo "No IOAccelerator found."
+          ioreg -l -r -c IOGPU || echo "No IOGPU found."
+
+          echo "============================================="
+          echo "🔍 PCI Devices Matching Display / VGA / 3D"
+          echo "============================================="
+          ioreg -p IOPCI -l | grep -iE 'class-code|model|device-id|vendor-id|IOName' | head -n 40 || true
+
+      - name: Swift Metal GPU Hardware Probe
+        run: |
+          cat << 'EOF' > probe_metal.swift
+          import Foundation
+          import Metal
+
+          print("=============================================")
+          print("⚡ Metal Framework GPU Probe")
+          print("=============================================")
+
+          let devices = MTLCopyAllDevices()
+          print("Total Metal devices found: \(devices.count)")
+
+          if devices.isEmpty {
+              print("❌ MTLCopyAllDevices() returned 0 devices.")
+          } else {
+              for (index, dev) in devices.enumerated() {
+                  print("\n--- Device [\(index)]: \(dev.name) ---")
+                  print("  Registry ID: \(dev.registryID)")
+                  print("  Low Power: \(dev.isLowPower)")
+                  print("  Headless: \(dev.isHeadless)")
+                  print("  Removable: \(dev.isRemovable)")
+                  print("  Unified Memory: \(dev.hasUnifiedMemory)")
+                  print("  Max Working Set: \(dev.recommendedMaxWorkingSetSize / 1024 / 1024) MB")
+                  print("  Max Buffer Length: \(dev.maxBufferLength / 1024 / 1024) MB")
+                  print("  Supports Metal 3: \(dev.supportsFamily(.metal3))")
+                  if #available(macOS 11.0, *) {
+                      print("  Supports Raytracing: \(dev.supportsRaytracing)")
+                  }
+              }
+          }
+
+          if let defaultDevice = MTLCreateSystemDefaultDevice() {
+              print("\n✅ Default Metal Device: \(defaultDevice.name)")
+          } else {
+              print("\n❌ MTLCreateSystemDefaultDevice() returned nil (No Default Metal GPU).")
+          }
+          EOF
+
+          swift probe_metal.swift || true
+
+      - name: Python OpenGL / Graphics Probe
+        run: |
+          python3 -c "
+          import subprocess
+
+          print('=============================================')
+          print('🎮 Summary & Additional Checks')
+          print('=============================================')
+          try:
+              out = subprocess.check_output(['system_profiler', 'SPDisplaysDataType'], text=True)
+              print('SPDisplaysDataType summary:\n', out.strip() if out.strip() else 'Empty (No physical or virtual displays reported)')
+          except Exception as e:
+              print('Error running system_profiler:', e)
+          "
