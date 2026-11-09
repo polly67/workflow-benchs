@@ -1,0 +1,47 @@
+name: Check macOS Latest Specs & OS
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/check-macos-latest-spec.yml'
+
+jobs:
+  check-specs:
+    name: "Slot ${{ matrix.slot }} - macos-latest OS & Specs"
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2, 3]
+    steps:
+      - name: Probe OS & Hardware
+        run: |
+          echo "=================================================="
+          echo "🍏 System Version Information"
+          echo "=================================================="
+          sw_vers
+          echo ""
+          echo "=================================================="
+          echo "🐧 Darwin Kernel Information"
+          echo "=================================================="
+          uname -a
+          echo ""
+          echo "=================================================="
+          echo "💻 Hardware Specs"
+          echo "=================================================="
+          VCPU=$(sysctl -n hw.ncpu)
+          MEM_BYTES=$(sysctl -n hw.memsize)
+          RAM_GB=$(python3 -c "print(round(${MEM_BYTES} / (1024**3)))")
+          CHIP=$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo "Apple Silicon")
+          echo "CPU Brand: $CHIP"
+          echo "vCPUs:     $VCPU"
+          echo "RAM:       ${RAM_GB} GB (${MEM_BYTES} bytes)"
+          echo ""
+          echo "=================================================="
+          echo "🏷️ Environment Details"
+          echo "=================================================="
+          echo "ImageOS:      $ImageOS"
+          echo "ImageVersion: $ImageVersion"
+          echo "Host Name:    $(hostname)"
+          echo "=================================================="
