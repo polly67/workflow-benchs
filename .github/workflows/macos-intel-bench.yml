@@ -1,0 +1,105 @@
+name: macOS Intel CPU + GPU Benchmark
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [bench/macos-intel]
+    paths:
+      - '.github/workflows/macos-intel-bench.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    name: macOS 15 Intel - CPU, memory, disk, Metal
+    runs-on: macos-15-intel
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install benchmark tools
+        run: brew install sysbench fio
+
+      - name: CPU, memory, SHA-256 and disk
+        run: |
+          mkdir -p results
+          python3 scripts/benchmark.py macos-15-intel
+
+      - name: Metal GPU
+        run: |
+          mkdir -p results
+          swift scripts/gpu_test.swift
+          cp results/metal_report.json results/macos-15-intel-gpu.json
+
+      - name: Report
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os
+
+          cpu = json.load(open("results/macos-15-intel.json"))
+          gpu = json.load(open("results/macos-15-intel-gpu.json"))
+          s, c, m = cpu["sys_info"], cpu["cpu"], cpu["memory"]
+
+          out = [
+              "# macOS Intel CPU + GPU benchmark",
+              "",
+              f"**Host** - {s['cpu_model']} · {s['cpu_cores']} vCPU · "
+              f"{s['mem_total_gb']} GB RAM · {s['os_name']} ({s['arch']}, kernel {s['kernel']})",
+              "",
+              "## CPU / memory",
+              "",
+              "| Metric | Result |",
+              "|---|---|",
+              f"| Sysbench single-thread | {c['single_thread_eps']:,.0f} eps |",
+              f"| Sysbench multi-thread | {c['multi_thread_eps']:,.0f} eps "
+              f"({c['multi_thread_eps'] / c['single_thread_eps']:.2f}x) |",
+              f"| SHA-256 | {cpu['sha256']['sha256_mb_per_sec']:.1f} MB/s |",
+              f"| Memory read | {m['mem_read_mib_sec'] / 1024:.1f} GB/s |",
+              f"| Memory write | {m['mem_write_mib_sec'] / 1024:.1f} GB/s |",
+              "",
+              "## GPU / Metal",
+              "",
+          ]
+
+          if gpu.get("metalDevicesFound"):
+              out += [
+                  "| Field | Value |",
+                  "|---|---|",
+                  f"| Device | {gpu.get('defaultDeviceName')} |",
+                  f"| Unified memory | {gpu.get('hasUnifiedMemory')} |",
+                  f"| Metal 3 | {gpu.get('supportsMetal3')} |",
+                  f"| MPS support | {gpu.get('mpsSupported')} |",
+                  f"| Max working set | {gpu.get('recommendedMaxWorkingSetMB', 0):.0f} MB |",
+                  f"| Max buffer | {gpu.get('maxBufferLengthMB', 0):.0f} MB |",
+                  "",
+                  "| Benchmark | Result |",
+                  "|---|---|",
+                  f"| Vector add bandwidth | {gpu.get('vectorAddBandwidthGBs', 0):.1f} GB/s "
+                  f"({gpu.get('vectorAddLatencyMs', 0):.2f} ms) |",
+                  f"| Compute stress | {gpu.get('computeGFLOPS', 0):.1f} GFLOPS "
+                  f"({gpu.get('computeStressLatencyMs', 0):.2f} ms) |",
+                  f"| 2048x2048 FP32 GEMM | {gpu.get('gemmTFLOPS', 0):.2f} TFLOPS "
+                  f"({gpu.get('gemm2048LatencyMs', 0):.2f} ms) |",
+                  "",
+              ]
+          else:
+              out += [f"No Metal device: {gpu.get('error', 'MTLCopyAllDevices returned 0 devices')}", ""]
+
+          text = "\n".join(out)
+          print(text)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(text + "\n")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-15-intel-cpu-gpu
+          path: results/
+          retention-days: 14
